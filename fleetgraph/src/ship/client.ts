@@ -163,6 +163,10 @@ export class ShipClient {
 
   // ── Projects ─────────────────────────────────────────────────────────────
 
+  getProjects(): Promise<Result<ShipProject[]>> {
+    return this.get(`/api/projects`);
+  }
+
   getProject(id: string): Promise<Result<ShipProject>> {
     return this.get(`/api/projects/${id}`);
   }
@@ -176,6 +180,10 @@ export class ShipClient {
   }
 
   // ── Programs ─────────────────────────────────────────────────────────────
+
+  getPrograms(): Promise<Result<ShipProgram[]>> {
+    return this.get(`/api/programs`);
+  }
 
   getProgram(id: string): Promise<Result<ShipProgram>> {
     return this.get(`/api/programs/${id}`);
