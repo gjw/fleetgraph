@@ -1,18 +1,18 @@
-# Treasury Ship
+# FleetGraph
 
-Audit and improvement cycle on an existing project-management app (Jira/Trello-style).
+Project intelligence agent for Ship — proactive monitoring and on-demand reasoning via graph architecture.
 
 ## Role Assignment
 
 Your first message from Chair will be your role name.
 
-- **TOWER** → Read `shipshape/process/tower.md` for your full instructions.
-- **SCOUT** → Read `shipshape/process/tower.md` — Scout triggers Tower in cold-start mode (new project, no existing architecture).
-- **TRENCH** → Read `shipshape/process/trench.md`. Chair provides your task.
-- **HERALD** → Read `shipshape/process/herald.md` for your full instructions.
-- **WARDEN** → Read `shipshape/process/warden.md`. Audits before merge/release.
+- **TOWER** → Read `prompts/tower.md` for your full instructions.
+- **SCOUT** → Read `prompts/tower.md` — Scout triggers Tower in cold-start mode (new project, no existing architecture).
+- **TRENCH** → Read `prompts/trench.md`. Chair provides your task.
+- **HERALD** → Read `prompts/herald.md` for your full instructions.
+- **WARDEN** → Read `prompts/warden.md`. Audits before merge/release.
 
-Read `shipshape/process/CONTEXT.md` for constraints. Read `shipshape/process/ARCHITECTURE.md` for system design.
+Read `CONTEXT.md` for constraints. Read `ARCHITECTURE.md` for system design.
 Read `beads-agent-guide.md` for br commands.
 
 ## Commands
@@ -23,80 +23,13 @@ Read `beads-agent-guide.md` for br commands.
 
 ## Conventions
 
-- **Commits:** Imperative mood, include issue ID: `Add feature (ts-a1b2)`
+- **Commits:** Imperative mood, include issue ID: `Add feature (fg-a1b2)`
 - **Branches:** `task/{id}-{slug}` (e.g., `task/abc1-timer-widget`)
 - **Markdown formatting:** Always leave a blank line between a heading (or bold line)
   and the first list item, table, or code block below it.
 
 ## Pointers
 
-- Read `shipshape/process/ARCHITECTURE.md` for system design.
+- Read `ARCHITECTURE.md` for system design.
 - Run `br ready --json` for your task.
 - See `beads-agent-guide.md` for br commands.
-
-<!-- br-agent-instructions-v1 -->
-
----
-
-## Beads Workflow Integration
-
-This project uses [beads_rust](https://github.com/Dicklesworthstone/beads_rust) (`br`/`bd`) for issue tracking. Issues are stored in `.beads/` and tracked in git.
-
-### Essential Commands
-
-```bash
-# View ready issues (unblocked, not deferred)
-br ready              # or: bd ready
-
-# List and search
-br list --status=open # All open issues
-br show <id>          # Full issue details with dependencies
-br search "keyword"   # Full-text search
-
-# Create and update
-br create --title="..." --description="..." --type=task --priority=2
-br update <id> --status=in_progress
-br close <id> --reason="Completed"
-br close <id1> <id2>  # Close multiple issues at once
-
-# Sync with git
-br sync --flush-only  # Export DB to JSONL
-br sync --status      # Check sync status
-```
-
-### Workflow Pattern
-
-1. **Start**: Run `br ready` to find actionable work
-2. **Claim**: Use `br update <id> --status=in_progress`
-3. **Work**: Implement the task
-4. **Complete**: Use `br close <id>`
-5. **Sync**: Always run `br sync --flush-only` at session end
-
-### Key Concepts
-
-- **Dependencies**: Issues can block other issues. `br ready` shows only unblocked work.
-- **Priority**: P0=critical, P1=high, P2=medium, P3=low, P4=backlog (use numbers 0-4, not words)
-- **Types**: task, bug, feature, epic, chore, docs, question
-- **Blocking**: `br dep add <issue> <depends-on>` to add dependencies
-
-### Session Protocol
-
-**Before ending any session, run this checklist:**
-
-```bash
-git status              # Check what changed
-git add <files>         # Stage code changes
-br sync --flush-only    # Export beads changes to JSONL
-git commit -m "..."     # Commit everything
-git push                # Push to remote
-```
-
-### Best Practices
-
-- Check `br ready` at session start to find available work
-- Update status as you work (in_progress → closed)
-- Create new issues with `br create` when you discover tasks
-- Use descriptive titles and set appropriate priority/type
-- Always sync before ending session
-
-<!-- end-br-agent-instructions -->

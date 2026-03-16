@@ -1,0 +1,23 @@
+# Project Manifest — FleetGraph
+
+[project]
+name = "FleetGraph"
+description = "Project intelligence agent for Ship — proactive monitoring and on-demand reasoning via graph architecture"
+prefix = "fg"
+
+[roles]
+tower = true
+trench = true
+herald = true
+warden = true
+
+[build]
+stack = "python"
+workflow = "beads"
+
+[beads]
+command = "br"
+sync_command = "br sync --flush-only"
+
+[herald]
+voice = "sardonic-technical"
