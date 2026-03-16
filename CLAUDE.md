@@ -15,10 +15,19 @@ Your first message from Chair will be your role name.
 Read `CONTEXT.md` for constraints. Read `ARCHITECTURE.md` for system design.
 Read `beads-agent-guide.md` for br commands.
 
+## Stack
+
+- **LangGraph.js** (TypeScript) — graph orchestration + LangSmith tracing
+- **OpenAI API** — GPT-4o for reasoning, GPT-4o-mini for classification
+- **Ship REST API** — sole data source, no direct DB access
+- **Deployed:** Linode VPS via pm2, separate service from Ship
+
 ## Commands
 
 ```bash
-# TODO: Scout/Tower fills in project commands during cold-start
+pnpm dev                    # Ship: api + web in parallel
+pnpm --filter fleetgraph build  # Build FleetGraph package
+# TODO: fill in as fleetgraph package is scaffolded
 ```
 
 ## Conventions

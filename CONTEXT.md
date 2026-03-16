@@ -3,13 +3,20 @@
 ## Situation
 
 - Project intelligence agent for Ship — proactive monitoring and on-demand reasoning via graph architecture
-- <!-- TODO: Add timeline, stage, goals -->
+- **GFA Week 5 project.** Ship is a US Treasury project management app. Week 4 (shipshape/) was auditing/improving it. Week 5 is building FleetGraph on top of it.
+- **MVP due:** Tue 2026-03-17 11:59 PM — running graph, LangSmith tracing, FLEETGRAPH.md, HITL gate, real data, deployed
+- **Early Submission:** Fri 2026-03-20 — + test cases, architecture decisions
+- **Final Submission:** Sun 2026-03-22 — + cost analysis
 
 ## Constraints
 
 - **Solo + agents.** One person coordinating multiple Claude Code instances.
 - **Cost-aware.** Agent sessions should be purposeful, not exploratory sprawl.
-- <!-- TODO: Add project-specific constraints -->
+- **Ship API only.** FleetGraph reads/writes Ship data through its REST API, never direct DB access.
+- **OpenAI for LLM.** Anthropic is a federal supply chain risk. All AI integration uses OpenAI API.
+- **LangGraph.js + LangSmith.** TypeScript graph framework with native tracing. Every graph run must be traced.
+- **DB amendments allowed.** We can add document types, tables, API endpoints to Ship. The agent just can't bypass the API.
+- **Deployed to Linode VPS via pm2.** Don't break Ship's AWS deployment stack.
 
 ## Roles
 
