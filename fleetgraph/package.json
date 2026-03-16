@@ -1,0 +1,32 @@
+{
+  "name": "@ship/fleetgraph",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Project intelligence agent for Ship — proactive monitoring and on-demand reasoning via graph architecture",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@langchain/core": "^0.3.0",
+    "@langchain/langgraph": "^0.2.0",
+    "@langchain/openai": "^0.5.0",
+    "@ship/shared": "workspace:*",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "langsmith": "^0.3.0",
+    "openai": "^4.80.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.19.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
