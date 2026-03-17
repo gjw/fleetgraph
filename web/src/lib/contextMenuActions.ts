@@ -420,6 +420,8 @@ const CONTEXT_ACTIONS: Record<DocumentType, ContextMenuItem[]> = {
       handlerKey: 'onCopyLink',
     },
   ],
+  fleetgraph_finding: [],
+  fleetgraph_config: [],
 };
 
 // Backlink-specific actions (not a document type, but used in BacklinksPanel)
