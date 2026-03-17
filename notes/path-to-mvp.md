@@ -54,32 +54,38 @@
 NOW ──────────────────────────────────────────────── 8 hrs ──→ SUBMIT
 │                                                              │
 ├─ TRACK A (Trench, code) ─────────────────────────────────────┤
-│  fg-3up + fg-tlj + fg-3ml  (~3-4 hrs combined)               │
-│  ↓                                                           │
-│  fg-2pi  deploy to Linode  (~1-2 hrs)                        │
-│  ↓                                                           │
-│  Verify: health endpoint, proactive timer fires, trace shows │
+│  fg-3up + fg-tlj + fg-3ml  (single session, IN PROGRESS)     │
 │                                                              │
-├─ TRACK B (Herald, writing) ──────────────────────────────────┤
-│  fg-1ub  FLEETGRAPH.md sections  (~2-3 hrs)                  │
-│  ↓                                                           │
-│  Add deployed URL to FLEETGRAPH.md                           │
+├─ TRACK B (Chair, infra) ─────────────────────────────────────┤
+│  fg-2pi  deploy to Linode  (Chair setting up now)             │
 │                                                              │
-├─ BUFFER ─────────────────────────────────────────────────────┤
-│  ~2-3 hrs for debugging, deploy issues, doc polish           │
+├─ TRACK C (Herald, writing) ──────────────────────────────────┤
+│  fg-1ub  FLEETGRAPH.md sections                              │
+│                                                              │
+├─ CONVERGE ───────────────────────────────────────────────────┤
+│  After A + B + C:                                            │
+│  → Deploy Trench's code to Linode                            │
+│  → Verify: health, proactive trace, chat, decide             │
+│  → Add deployed URL to FLEETGRAPH.md                         │
+│  ↓                                                           │
+│  fg-1za  Video script (needs deploy + FLEETGRAPH.md done)    │
+│  ↓                                                           │
+│  fg-82r  Record demo video (LAST TASK)                       │
+│  ↓                                                           │
+│  SUBMIT                                                      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-**Track A and Track B are fully independent.** No shared dependencies.
-Launch both simultaneously.
+**Tracks A, B, and C are fully independent.** All running now.
+They converge for deploy verification → video → submit.
 
 ---
 
 ## Track A: Code (Trench)
 
-### Phase 1: Service endpoints (fg-3up + fg-tlj + fg-3ml)
+### Phase 1: Service endpoints (fg-3up + fg-tlj + fg-3ml) — IN PROGRESS
 
-These three beads touch different files and can be done in a single Trench session:
+Trench is doing all three in a single session ("fuck it, all at once"):
 
 | Bead | What | Files | Time est |
 |------|------|-------|----------|
@@ -99,9 +105,9 @@ These three beads touch different files and can be done in a single Trench sessi
 **Acceptance:** `pnpm start` runs, health endpoint responds, proactive timer fires
 within 5 minutes and produces a LangSmith trace.
 
-### Phase 2: Deploy (fg-2pi)
+### Phase 2: Deploy (fg-2pi) — Chair setting up Linode now
 
-After Phase 1 works locally:
+Chair is preparing the Linode VPS in parallel. Once Trench finishes Phase 1:
 
 1. `pnpm --filter fleetgraph build`
 2. scp to Linode VPS
@@ -113,6 +119,15 @@ After Phase 1 works locally:
    - `PORT` (whatever's available)
 4. `pm2 start dist/index.js --name fleetgraph`
 5. Verify: health endpoint from public URL, first proactive trace appears
+
+### Phase 3: Video (fg-1za → fg-82r)
+
+After deploy is verified and FLEETGRAPH.md is complete:
+
+1. **fg-1za — Video script:** 3-5 min demo. Show what actually works: proactive
+   timer firing, on-demand chat, HITL confirm/dismiss, 2 LangSmith traces with
+   different paths. Don't demo scenario-specific detections that aren't tuned yet.
+2. **fg-82r — Record video:** Screen recording with voiceover. Last task before submit.
 
 ---
 
@@ -186,10 +201,12 @@ These are deferred — do not touch until after MVP submission:
 
 ---
 
-## Launch Order
+## Status + Launch Order
 
-1. **NOW:** Launch Trench on fg-3up + fg-tlj + fg-3ml (single session, all three)
-2. **NOW:** Launch Herald on fg-1ub (FLEETGRAPH.md writing)
-3. **After Phase 1:** Launch Trench on fg-2pi (deploy)
-4. **After deploy:** Verify proactive trace appears, add deployed URL to FLEETGRAPH.md
-5. **Submit**
+1. **IN PROGRESS:** Trench on fg-3up + fg-tlj + fg-3ml (single session, all three)
+2. **IN PROGRESS:** Chair setting up Linode for fg-2pi
+3. **NEXT:** Launch Herald on fg-1ub (FLEETGRAPH.md writing)
+4. **AFTER A+B+C:** Deploy Trench's code to Linode, verify all endpoints
+5. **AFTER DEPLOY:** fg-1za — write video script (Herald or Chair)
+6. **LAST:** fg-82r — record demo video
+7. **SUBMIT**
