@@ -259,25 +259,67 @@ Not separate scenarios — they make the Tier 1/2 scenarios richer.
 
 ---
 
-## Test Data Seeding Checklist
+## Test Data Seeding
 
-Each scenario needs its Ship state created before the graph can run against it.
-Seeding is either via Ship API calls or direct database seed script.
+**Seed script:** `api/src/db/seed-fleetgraph-demos.ts`
 
-| Scenario | Documents needed | Issues needed | Other data |
-|----------|-----------------|---------------|-----------|
-| S1 | 1 sprint | 12 issues (8 pre-start, 4 post-start) | Sprint-issue associations |
-| S3 | 4-5 person docs, 4+ sprint retros/plans | — | Standup records, approval records |
-| S4 | — | 7 issues (chain of 3 + 2 downstream + 2 queue filler) | Issue dependencies |
-| S6 | — | 5 issues for 1 engineer | Issue dependencies, due dates |
-| S7 | 4 retro docs, 1 program doc | 1 action-item issue (R1) | Sprint-retro associations |
-| S2 | — | 6 issues in triage | Created_by from external source |
-| S5 | 1 project, 4 sprints | ~20 issues across sprints | Velocity data via closed issues |
+```bash
+pnpm db:seed      # Ship baseline (users, workspace, programs)
+pnpm db:seed:fg   # FleetGraph demo scenarios (this data)
+```
 
-**Total unique data:** ~5-6 person documents, ~50 issues, 4 retro documents,
-4-5 sprints, 1 program, 1 project, various associations.
+Both are idempotent (safe to re-run). The FG seed uses deterministic UUIDs via
+SHA-256 hashing — same IDs every run, every environment. All data lives under
+a **FleetGraph Demo** program with prefix `FG`.
 
-Some of this may already exist in Ship's seed data. Check before creating duplicates.
+### Target data per scenario
+
+| Scenario | Target data | Confounders | Key IDs |
+|----------|------------|-------------|---------|
+| S1 | 3 sprints (active + clean + historical), 25 issues | Clean sprint (6, no creep), historical sprint (7, completed creep) | `demoId('s1:sprint')`, `demoId('s1:post-issue:0')` |
+| S2 | 6 triage issues (4 external, 2 internal, 3-5 days old) | 1 fresh triage (today), 3 already-triaged | `demoId('s2:triage:0')` |
+| S3 | 4 sprints, standups/plans/retros for persons A-D | Newbie (1 sprint), Person F (1 missed standup only) | `demoId('s3:sprint:0')`, `demoId('s3:approval-issue')` |
+| S4 | 1 sprint, 3-link chain (A←B←C), 2 downstream, 4 queue filler | Fresh review, resolved chain, small queue (2 items) | `demoId('s4:issueA')`, `demoId('s4:issueB')`, `demoId('s4:issueC')` |
+| S5 | 2 projects (risk + healthy), 7 sprints, ~58 issues | Healthy project with increasing velocity | `demoId('s5:project')`, `demoId('s5:healthy-project')` |
+| S6 | 1 sprint, 5 issues (X/Y/Z/W/V) + 2 downstream + 1 blocker | 3 other-engineer, 2 done, 1 cancelled | `demoId('s6:issueX')` through `demoId('s6:issueV')` |
+| S7 | 6 sprints, 6 retros (deploy pain in 3/4), issue R1 in backlog | Positive deploy retro, all-green retro, completed action item | `demoId('s7:retro:10')`, `demoId('s7:issueR1')` |
+
+### User role assignments
+
+| Role | User | Email | Scenarios |
+|------|------|-------|-----------|
+| Director | Dev User | dev@ship.local | S3, S5 |
+| PM / Sprint Owner | Alice Chen | alice.chen@ship.local | S1, S6 |
+| Engineer 1 (blocked) | David Kim | david.kim@ship.local | S1, S4, S5 |
+| Engineer 2 (chain) | Emma Johnson | emma.johnson@ship.local | S1, S4, S5 |
+| Engineer 3 (bottleneck) | Frank Garcia | frank.garcia@ship.local | S4 (5 items in_review) |
+| Compliant (control) | Grace Lee | grace.lee@ship.local | S3 (fully compliant), S4 |
+| Newbie (confounder) | Henry Patel | henry.patel@ship.local | S3 (1 sprint only) |
+| Scope Adder | Bob Martinez | bob.martinez@ship.local | S1 (adds 3/4 post-start), S3 |
+| Retro Author | Carol Williams | carol.williams@ship.local | S7 |
+| Target Engineer | Iris Nguyen | iris.nguyen@ship.local | S3, S6 (smart next action) |
+| Small Queue (confounder) | Jack Brown | jack.brown@ship.local | S4 (2 items in_review) |
+
+### Issue dependencies
+
+S4 and S6 store dependencies as `properties.depends_on: string[]` (array of
+issue UUIDs). The `relationship_type` enum does not include `depends_on`, so
+this uses JSONB properties rather than `document_associations`.
+
+### Confounder philosophy
+
+Every scenario includes data that should NOT trigger detection. This validates
+query precision — we know results aren't just "the only data that exists."
+
+- **S1:** A clean sprint with zero scope creep, a historical sprint where creep already resolved
+- **S2:** A triage issue created today (too fresh), issues that were triaged (now in todo)
+- **S3:** Person D does everything right (no finding). Newbie has 1 sprint of data (insufficient). Person F missed 1 standup (not a pattern)
+- **S4:** A fresh in_review issue (not stale), a dependency chain where the blocker is done, an engineer with only 2 in_review (not a bottleneck)
+- **S5:** A healthy project with increasing velocity and proper ownership
+- **S6:** Issues assigned to other engineers, completed issues, a cancelled issue
+- **S7:** A retro mentioning deploy positively, an all-green retro, an action item that was completed
+
+**Total:** ~195 documents, ~125 associations.
 
 ---
 
