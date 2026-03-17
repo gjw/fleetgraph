@@ -1,6 +1,7 @@
 import type { GraphStateType, GraphUpdateType, Finding } from '../state.js';
 import type { BelongsToType } from '@ship/shared';
 import { getProactiveClient } from '../../ship/factory.js';
+import type { ShipClient } from '../../ship/client.js';
 
 function entityTypeToBelongsTo(
   entityType: Finding['affectedEntityType'],
@@ -28,6 +29,30 @@ function buildTipTapContent(reasoning: string): Record<string, unknown> {
       },
     ],
   };
+}
+
+/**
+ * Check if the affected entity exists as a document before creating
+ * an association. Person findings often reference user UUIDs (from team
+ * grid) rather than person document UUIDs, which would violate the FK.
+ */
+async function resolveAssociation(
+  client: ShipClient,
+  finding: Finding,
+): Promise<Array<{ id: string; type: BelongsToType }>> {
+  const docResult = await client.getDocument(finding.affectedEntityId);
+  if (docResult.error) {
+    console.log(
+      `[persist] entity ${finding.affectedEntityId} (${finding.affectedEntityType}) not found as document — skipping association`,
+    );
+    return [];
+  }
+  return [
+    {
+      id: finding.affectedEntityId,
+      type: entityTypeToBelongsTo(finding.affectedEntityType),
+    },
+  ];
 }
 
 export async function persistNode(
@@ -61,17 +86,14 @@ export async function persistNode(
       trace_url: state.traceUrl ?? null,
     };
 
+    const belongsTo = await resolveAssociation(client, finding);
+
     const result = await client.createDocument({
       title: finding.title,
       document_type: 'fleetgraph_finding',
       properties,
       content: buildTipTapContent(finding.reasoning),
-      belongs_to: [
-        {
-          id: finding.affectedEntityId,
-          type: entityTypeToBelongsTo(finding.affectedEntityType),
-        },
-      ],
+      ...(belongsTo.length > 0 ? { belongs_to: belongsTo } : {}),
     });
 
     if (result.error) {
