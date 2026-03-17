@@ -41,7 +41,9 @@ export type DocumentType =
   | 'weekly_plan'
   | 'weekly_retro'
   | 'standup'
-  | 'weekly_review';
+  | 'weekly_review'
+  | 'fleetgraph_finding'
+  | 'fleetgraph_config';
 
 // Issue states
 export type IssueState = 'triage' | 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';

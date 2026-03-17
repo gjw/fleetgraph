@@ -56,7 +56,7 @@ async function canAccessDocument(
 // Validation schemas
 const createDocumentSchema = z.object({
   title: z.string().min(1).max(255).optional().default('Untitled'),
-  document_type: z.enum(['wiki', 'issue', 'program', 'project', 'sprint', 'person', 'weekly_plan', 'weekly_retro']).optional().default('wiki'),
+  document_type: z.enum(['wiki', 'issue', 'program', 'project', 'sprint', 'person', 'weekly_plan', 'weekly_retro', 'fleetgraph_finding', 'fleetgraph_config']).optional().default('wiki'),
   parent_id: z.string().uuid().optional().nullable(),
   program_id: z.string().uuid().optional().nullable(),
   sprint_id: z.string().uuid().optional().nullable(),
@@ -76,7 +76,7 @@ const updateDocumentSchema = z.object({
   position: z.number().int().min(0).optional(),
   properties: z.record(z.unknown()).optional(),
   visibility: z.enum(['private', 'workspace']).optional(),
-  document_type: z.enum(['wiki', 'issue', 'program', 'project', 'sprint', 'person']).optional(),
+  document_type: z.enum(['wiki', 'issue', 'program', 'project', 'sprint', 'person', 'fleetgraph_finding', 'fleetgraph_config']).optional(),
   // Issue-specific fields (stored in properties but accepted at top level for convenience)
   state: z.string().optional(),
   priority: z.string().optional(),
