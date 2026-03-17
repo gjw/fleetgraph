@@ -90,6 +90,7 @@ export default defineConfig(({ mode }) => {
       port: parseInt(env.VITE_PORT || '4173'),
       strictPort: true,
       proxy: proxyConfig,
+      allowedHosts: ['fleetgraph.foramerica.dev'],
     },
   };
 });
