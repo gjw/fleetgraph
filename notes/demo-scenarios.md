@@ -10,6 +10,12 @@ seeding, LangSmith trace capture, and the demo video.
 - **Tier 2** (2 scenarios) — full 7, ship if Tier 1 is solid
 - **Tier 3** — extensions to existing scenarios, time permitting
 
+**Recipient model:** See `docs/architecture-who-needs-to-know.md`. Findings have
+two tiers: **Direct** (`recipient_ids: string[]` in properties — badge + ding) and
+**Ambient** (linked to affected entity via `document_associations` — visible on entity
+pages, no badge). Reasoning node must produce **one finding per condition per entity**
+(rollup), not one per item. Individual items cited in narrative text.
+
 ---
 
 ## Tier 1 Scenarios
@@ -26,11 +32,13 @@ seeding, LangSmith trace capture, and the demo video.
 - At least 2 of the added issues should be by the same person (for actor-aware stretch)
 - One of the added issues should be P2 or lower (unnecessary scope)
 
-**Expected detection:**
+**Expected detection (ONE rollup finding, not 4):**
 
 - Scope increased ~50% (4 of 12 issues added post-start)
 - Names who added what and when
 - Quantifies impact: "4 of your original 8 items are still in_progress"
+- **Direct recipients:** `[sprint_owner_id]` — sprint owner gets badge
+- **Ambient:** finding linked to sprint doc — visible on sprint page
 
 **Stretch — actor-aware:**
 
@@ -58,12 +66,13 @@ what changed and who changed it."
 - Person D: fully compliant (control — agent should NOT flag this person)
 - Multiple sprints with plan/retro documents to establish the pattern
 
-**Expected detection:**
+**Expected detection (ONE rollup finding per person, 3 total):**
 
-- Roll-up: "3 accountability gaps across your team this sprint"
-- Person A: standup compliance dropping
-- Person B: selective debt — plans yes, retros no
-- Person C: approval bottleneck
+- Person A finding: standup compliance dropping → **direct:** `[person_a_id]`
+- Person B finding: selective debt — plans yes, retros no → **direct:** `[person_b_id]`
+- Person C finding: approval bottleneck → **direct:** `[person_c_id, approver_id]`
+- Person D: fully compliant — NO finding (agent stays quiet)
+- **Ambient:** each finding linked to the respective person doc
 
 **Stretch — actor-aware:**
 
@@ -90,12 +99,14 @@ everything else. That's not laziness, that's a signal something changed."
 - Issue D and E: also `in_review`, assigned to Engineer3 (establishes queue depth)
 - 2 additional issues downstream of Issue A (to show blast radius)
 
-**Expected detection:**
+**Expected detection (ONE finding for the chain, not per link):**
 
 - Traces full chain: A ← B ← C, all stuck
 - Identifies bottleneck: Engineer3's review queue (7 items)
 - Quantifies blast radius: "This chain blocks 3 downstream issues"
 - Proposes action: reassign Issue C's review to someone with capacity
+- **Direct recipients:** `[engineer1_id, engineer3_id]` — blocked person + bottleneck owner
+- **Ambient:** finding linked to Issue A (the user's entry point)
 
 **Stretch — proactive version:**
 
@@ -127,13 +138,15 @@ and the agent makes the change through Ship's API."
   - Issue V: `open`, medium priority, `due_date` in 2 days
 - Sprint context with priorities set
 
-**Expected detection:**
+**Expected detection (on-demand response, may not produce a persisted finding):**
 
 - "Finish Issue X first — you're close and it's in progress"
 - "Then start Issue Y — it's P0 and unblocks 2 team members"
 - "Don't start Issue Z yet — it's blocked on [blocker]"
 - "Issue V is due in 2 days — slot it after Y"
 - "Issue W can wait"
+- **Graph path note:** This may take the Clean path (informational response,
+  no finding persisted) — which is good, it demonstrates that path in the traces
 
 **Demo narrative:**
 
@@ -159,11 +172,13 @@ teammate, not a Kanban board."
 - Issue R1 (from sprint 10 action item): still in backlog, status `open`, never started
 - Program document that groups all these sprints
 
-**Expected detection:**
+**Expected detection (ONE finding for the pattern, not per retro):**
 
 - "Deploy friction" appears in 3 of 4 retros (sprints 10, 12, 13)
 - Severity escalating: "painful" → "caused rollback" → "3-hour incident"
 - Action item from sprint 10 ("Automate staging deploys") is still in backlog
+- **Direct recipients:** `[program_owner_id, project_owner_id]`
+- **Ambient:** finding linked to program doc
 
 **Stretch — loop closure:**
 
