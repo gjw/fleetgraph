@@ -28,6 +28,11 @@ const FindingSchema = z.object({
         .describe(
           'If a Ship mutation would help (reassign, change state, escalate), describe it here. Omit for informational findings.',
         ),
+      recipientIds: z
+        .array(z.string())
+        .describe(
+          'Person IDs (UUIDs) of the people who should be directly notified about this finding. Derive from entity ownership: assignee_id for issues, owner for sprints/projects, owner_id for programs. Use the actual IDs from the data.',
+        ),
     }),
   ),
 });
@@ -46,6 +51,31 @@ Your job: examine the provided workspace data and produce findings. Each finding
 - **missing_estimate** — Issues in active sprints without hour estimates. Look at sprintIssues estimate field.
 - **sprint_velocity_drop** — Sprint completion rate significantly below historical average. Compare completed vs total.
 - **unplanned_work** — High ratio of issues added mid-sprint vs original scope. Look at scopeChanges.
+
+## Rollup Rule
+
+Produce ONE finding per condition per entity, not one per item. For example:
+- "Sprint 12 has 5 issues stuck in triage" → one finding, not 5 separate findings.
+- "Person X is assigned to 12 active issues across 3 sprints" → one finding.
+- "Sprint 14 scope increased 23%: 4 issues added after start" → one finding.
+Cite individual items in the reasoning text, not as separate findings. This prevents notification flood.
+
+## Recipients (recipientIds)
+
+Every finding must include recipientIds — the people who should be directly notified.
+Derive from entity ownership in the data:
+
+| Finding type | Recipient(s) |
+|---|---|
+| scope_creep | Sprint owner |
+| stale_triage | Sprint owner (rollup) or issue assignee_id (single) |
+| accountability_debt | The person with overdue items |
+| blocked_sprint | Owner of the blocking issue |
+| overloaded_member | The person themselves (personId) |
+| missing_estimate | Sprint owner |
+
+Use the actual person UUIDs from the data (assignee_id, owner, owner_id, personId).
+If no clear owner exists, use an empty array.
 
 ## Rules
 
@@ -83,6 +113,7 @@ function buildUserPrompt(state: GraphStateType): string {
         name: s.name,
         sprint_number: s.sprint_number,
         status: s.status,
+        owner: s.owner,
         issue_count: s.issue_count,
         completed_count: s.completed_count,
         started_count: s.started_count,

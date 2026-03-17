@@ -20,6 +20,7 @@ export interface Finding {
   title: string;
   reasoning: string;
   recommendedAction?: string;
+  recipientIds: string[];
 }
 
 export interface ProposedAction {
