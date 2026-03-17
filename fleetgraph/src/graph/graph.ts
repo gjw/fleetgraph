@@ -11,7 +11,6 @@ import { classifyNode } from './nodes/classify.js';
 import { notifyNode } from './nodes/notify.js';
 import { actionProposeNode } from './nodes/action-propose.js';
 import { humanGateNode } from './nodes/human-gate.js';
-import { executeNode } from './nodes/execute.js';
 import { persistNode } from './nodes/persist.js';
 
 export function buildGraph() {
@@ -27,7 +26,6 @@ export function buildGraph() {
     .addNode('notify', notifyNode)
     .addNode('action-propose', actionProposeNode)
     .addNode('human-gate', humanGateNode)
-    .addNode('execute', executeNode)
     .addNode('persist', persistNode)
 
     // Linear: START → trigger → context
@@ -55,10 +53,11 @@ export function buildGraph() {
     // Notify path: notify → persist → END
     .addEdge('notify', 'persist')
 
-    // Action path: action-propose → human-gate → execute → persist
+    // Action path: action-propose → human-gate → END
+    // (human-gate creates finding docs with human_decision=null;
+    //  the decide endpoint handles confirm/dismiss imperatively)
     .addEdge('action-propose', 'human-gate')
-    .addEdge('human-gate', 'execute')
-    .addEdge('execute', 'persist')
+    .addEdge('human-gate', END)
 
     // persist → END
     .addEdge('persist', END);
