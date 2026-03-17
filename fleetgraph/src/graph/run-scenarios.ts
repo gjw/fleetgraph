@@ -13,7 +13,25 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildGraph } from './graph.js';
+
+// Load env from api/.env.local (where all keys live)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, '../../../api/.env.local');
+try {
+  const envContent = readFileSync(envPath, 'utf-8');
+  for (const line of envContent.split('\n')) {
+    const match = line.match(/^([A-Z_][A-Z0-9_]*)=(.+)$/);
+    if (match && !process.env[match[1]!]) {
+      process.env[match[1]!] = match[2]!;
+    }
+  }
+} catch {
+  // api/.env.local not found — rely on exported env vars
+}
 
 // ── Deterministic ID generator (mirrors seed script) ────────────────────────
 
@@ -213,7 +231,7 @@ async function runScenario(scenario: ScenarioConfig): Promise<RunResult> {
       affectedEntityId: string;
       affectedEntityType: string;
       recipientIds: string[];
-      recommendedAction?: string;
+      recommendedAction: string | null;
     }[];
     findingDocIds: string[];
     proposedAction: { type: string; description: string } | null;

@@ -19,7 +19,7 @@ export interface Finding {
   affectedEntityType: 'issue' | 'sprint' | 'project' | 'program' | 'person';
   title: string;
   reasoning: string;
-  recommendedAction?: string;
+  recommendedAction: string | null;
   recipientIds: string[];
 }
 
@@ -67,9 +67,9 @@ export const GraphState = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => [],
   }),
-  scopeChanges: Annotation<ShipScopeChanges | null>({
+  scopeChanges: Annotation<Array<{ sprintId: string; sprintName: string } & ShipScopeChanges>>({
     reducer: (_prev, next) => next,
-    default: () => null,
+    default: () => [],
   }),
   projects: Annotation<ShipProject[]>({
     reducer: (_prev, next) => next,

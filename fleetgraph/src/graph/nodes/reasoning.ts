@@ -24,9 +24,9 @@ const FindingSchema = z.object({
         ),
       recommendedAction: z
         .string()
-        .optional()
+        .nullable()
         .describe(
-          'If a Ship mutation would help (reassign, change state, escalate), describe it here. Omit for informational findings.',
+          'If a Ship mutation would help (reassign, change state, escalate), describe it here. Null for informational findings.',
         ),
       recipientIds: z
         .array(z.string())
@@ -141,9 +141,9 @@ function buildUserPrompt(state: GraphStateType): string {
     )}`);
   }
 
-  if (state.scopeChanges) {
+  if (state.scopeChanges.length > 0) {
     sections.push(
-      `## Scope Changes\n${JSON.stringify(state.scopeChanges, null, 2)}`,
+      `## Scope Changes (${state.scopeChanges.length} active sprints)\n${JSON.stringify(state.scopeChanges, null, 2)}`,
     );
   }
 
@@ -180,13 +180,13 @@ function buildUserPrompt(state: GraphStateType): string {
     sections.push(
       `## Team Grid\n${JSON.stringify(
         {
-          people: state.team.people.map((p) => ({
+          people: (state.team.users ?? state.team.people ?? []).map((p) => ({
             personId: p.personId,
             name: p.name,
             isArchived: p.isArchived,
           })),
-          assignmentCount: Object.keys(state.team.assignments).length,
-          assignments: state.team.assignments,
+          assignmentCount: Object.keys(state.team.associations ?? state.team.assignments ?? {}).length,
+          assignments: state.team.associations ?? state.team.assignments ?? {},
         },
         null,
         2,
@@ -210,7 +210,17 @@ function buildUserPrompt(state: GraphStateType): string {
     return 'No data was fetched from the workspace. Return an empty findings array.';
   }
 
-  return `Analyze the following Ship workspace data and produce findings.\n\n${sections.join('\n\n')}`;
+  let preamble = 'Analyze the following Ship workspace data and produce findings.';
+
+  if (state.mode === 'on_demand' && state.userMessage) {
+    preamble = `The user is asking: "${state.userMessage}"`;
+    if (state.documentId) {
+      preamble += `\nThey are viewing document ID: ${state.documentId} (type: ${state.documentType ?? 'unknown'}).`;
+    }
+    preamble += '\nAnalyze the workspace data below to answer their question. Produce findings only if relevant to their question.';
+  }
+
+  return `${preamble}\n\n${sections.join('\n\n')}`;
 }
 
 function hasData(state: GraphStateType): boolean {
@@ -218,7 +228,7 @@ function hasData(state: GraphStateType): boolean {
     state.issues.length > 0 ||
     state.sprints.length > 0 ||
     state.sprintIssues.length > 0 ||
-    state.scopeChanges !== null ||
+    state.scopeChanges.length > 0 ||
     state.projects.length > 0 ||
     state.programs.length > 0 ||
     state.team !== null ||

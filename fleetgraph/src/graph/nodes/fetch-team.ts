@@ -29,8 +29,8 @@ export async function fetchTeamNode(
   }
 
   console.log(
-    `[fetch-team] team=${teamResult.data ? teamResult.data.people.length + ' people' : 'error'}` +
-    ` accountability=${accountabilityResult.data ? accountabilityResult.data.items.length + ' items' : 'error'}` +
+    `[fetch-team] team=${teamResult.data?.users ? teamResult.data.users.length + ' people' : 'error'}` +
+    ` accountability=${accountabilityResult.data?.items ? accountabilityResult.data.items.length + ' items' : 'error'}` +
     ` programs=${programsResult.data ? programsResult.data.length : 'error'}`,
   );
 

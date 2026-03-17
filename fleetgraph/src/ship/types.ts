@@ -14,6 +14,7 @@ export interface ShipError {
   status: number;
   message: string;
   code?: string;
+  details?: unknown;
 }
 
 export type Result<T> = { data: T; error: null } | { data: null; error: ShipError };
@@ -283,9 +284,15 @@ export interface ShipTeamAssignment {
 }
 
 export interface ShipTeamGrid {
-  people: ShipTeamPerson[];
-  sprints: ShipTeamSprint[];
-  assignments: Record<string, Record<number, ShipTeamAssignment>>;
+  // API returns 'users' and 'weeks' — alias for clarity
+  users: ShipTeamPerson[];
+  weeks: ShipTeamSprint[];
+  associations: Record<string, Record<number, ShipTeamAssignment>>;
+  currentSprintNumber: number;
+  // Legacy aliases (kept for backward compat in reasoning prompts)
+  people?: ShipTeamPerson[];
+  sprints?: ShipTeamSprint[];
+  assignments?: Record<string, Record<number, ShipTeamAssignment>>;
 }
 
 export interface ShipTeamGridParams {
@@ -363,4 +370,9 @@ export interface ShipIssueParams {
   sort?: string;
   dir?: 'asc' | 'desc';
   archived?: boolean;
+  state?: string;           // comma-separated: 'triage,open,in_progress'
+  assignee_id?: string;
+  sprint_id?: string;
+  program_id?: string;
+  priority?: string;
 }

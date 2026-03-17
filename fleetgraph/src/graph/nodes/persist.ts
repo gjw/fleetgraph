@@ -77,6 +77,7 @@ export async function persistNode(
     if (result.error) {
       console.error(
         `[persist] failed to create finding doc: ${result.error.message}`,
+        result.error.details ? JSON.stringify(result.error.details) : '',
       );
       continue;
     }

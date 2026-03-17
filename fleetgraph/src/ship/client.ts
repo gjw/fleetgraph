@@ -86,15 +86,17 @@ export class ShipClient {
 
     if (!response.ok) {
       let message = response.statusText;
+      let details: unknown = undefined;
       try {
-        const errBody = (await response.json()) as { error?: string; message?: string };
+        const errBody = (await response.json()) as { error?: string; message?: string; details?: unknown };
         message = errBody.error ?? errBody.message ?? message;
+        details = errBody.details;
       } catch {
         // non-JSON error body — keep statusText
       }
       return {
         data: null,
-        error: { status: response.status, message },
+        error: { status: response.status, message, details },
       };
     }
 
