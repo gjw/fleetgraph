@@ -40,6 +40,9 @@ export interface ShipIssue {
   assignee_archived?: boolean;
   estimate: number | null;
   source: IssueSource;
+  due_date: string | null;
+  started_at: string | null;
+  completed_at: string | null;
   created_at: string;
   updated_at: string;
   created_by: string;
