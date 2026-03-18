@@ -3,6 +3,13 @@
 # Usage: ssh into Linode, cd ~/fleetgraph, then run: ./scripts/deploy-linode.sh
 set -e
 
+# Load environment variables (DATABASE_URL, etc.)
+if [ -f .env ]; then
+  set -a
+  source .env
+  set +a
+fi
+
 echo "=== Pulling latest code ==="
 git pull
 
