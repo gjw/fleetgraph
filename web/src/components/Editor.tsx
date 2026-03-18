@@ -92,6 +92,8 @@ interface EditorProps {
   aiScoringAnalysis?: { planAnalysis?: unknown; retroAnalysis?: unknown } | null;
   /** Suffix displayed after the title in the header (e.g., author name) */
   titleSuffix?: string;
+  /** Footer content rendered below the editor content area (e.g., FleetGraph chat panel) */
+  footer?: React.ReactNode;
 }
 
 type SyncStatus = 'connecting' | 'cached' | 'synced' | 'disconnected';
@@ -187,6 +189,7 @@ export function Editor({
   onContentChange,
   aiScoringAnalysis,
   titleSuffix,
+  footer,
 }: EditorProps) {
   const [title, setTitle] = useState(initialTitle === 'Untitled' ? '' : initialTitle);
   const titleInputRef = useRef<HTMLTextAreaElement>(null);
@@ -1044,6 +1047,9 @@ export function Editor({
         </div>
 
       </div>
+
+      {/* Footer content (e.g., FleetGraph chat panel) */}
+      {footer}
 
       {/* Properties sidebar content - rendered via portal into the aside landmark in App.tsx */}
       {sidebar && portalTarget && createPortal(

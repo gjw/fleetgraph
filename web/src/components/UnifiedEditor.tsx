@@ -16,6 +16,7 @@ import { DocumentTypeSelector, getMissingRequiredFields } from '@/components/sid
 import type { DocumentType as SelectableDocumentType } from '@/components/sidebars/DocumentTypeSelector';
 import { useAuth } from '@/hooks/useAuth';
 import { PlanQualityBanner, RetroQualityBanner } from '@/components/PlanQualityBanner';
+import { ChatPanel } from '@/components/FleetGraph/ChatPanel';
 import { useAutoSave } from '@/hooks/useAutoSave';
 import type { Person } from '@/components/PersonCombobox';
 import type { BelongsTo } from '@ship/shared';
@@ -501,6 +502,7 @@ export function UnifiedEditor({
       onContentChange={isWeeklyDoc ? setEditorContent : undefined}
       aiScoringAnalysis={isWeeklyDoc ? aiScoringAnalysis : undefined}
       titleSuffix={titleSuffix}
+      footer={<ChatPanel documentId={document.id} documentType={document.document_type} />}
     />
   );
 }
