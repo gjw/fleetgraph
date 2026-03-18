@@ -37,7 +37,13 @@
 > "FleetGraph runs on its own server, separate from Ship. Let me prove it's
 > real."
 
-**Action:** curl the health endpoint at the public URL. Show `{ "status": "ok" }`.
+**Action:**
+
+```bash
+curl -s https://fleetgraph.foramerica.dev/api/fleetgraph/health | jq
+```
+
+Show `{ "status": "ok" }`.
 
 **Bullet satisfied:** #7 (deployed and publicly accessible)
 
@@ -51,19 +57,12 @@
 >
 > "Here's what a proactive scan looks like."
 
-**Action:** Trigger a proactive graph run (or show the one already triggered
-in setup). Show the LangSmith trace opening — walk through the nodes:
+**Action:** Show the proactive trace already open in LangSmith. Walk through
+the nodes visually — don't narrate each one, just let the graph structure
+speak for itself.
 
-- Trigger (proactive mode)
-- Three parallel fetch nodes pulling real Ship data (show the API calls)
-- Reasoning node — GPT-4o analyzing the data
-- Classify node — routes to Action Propose
-- Persist — findings written to Ship's database
-
-> "It found 8 issues. Stale triage backlogs, an overloaded team member. These
-> are real findings from real seeded data — no mocked responses."
-
-**Action:** Show the findings in Ship's database (query or UI).
+> "It found four issues. These are real findings from real seeded data — no
+> mocked responses."
 
 **Bullets satisfied:** #1 (proactive end-to-end), #6 (real Ship data)
 
@@ -74,8 +73,13 @@ in setup). Show the LangSmith trace opening — walk through the nodes:
 > "The other mode: a user asks a question from inside Ship. The chat knows
 > what they're looking at."
 
-**Action:** POST to `/api/fleetgraph/chat` with a document context — e.g.,
-user viewing an issue, asking "What should I work on next?"
+**Action:**
+
+```bash
+curl -s -X POST https://fleetgraph.foramerica.dev/api/fleetgraph/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What should I work on next?", "documentType": "issue"}' | jq
+```
 
 Show the request and response. The agent reasons about the user's workload
 and produces a recommendation.
@@ -91,16 +95,15 @@ and produces a recommendation.
 
 > "FleetGraph *reads* autonomously, but it never writes to Ship without asking."
 
-**Action:** First, find a finding with a pending decision. Query Ship's API or
-check the database for a `fleetgraph_finding` with `human_decision: null`:
+**Action:** Find a finding with a pending decision:
 
 ```bash
-# Find a finding ID from the proactive scan (check Ship DB or recent findings)
-# Then show it:
-curl -s https://fleetgraph.foramerica.dev/api/fleetgraph/health
+# Query Ship for fleetgraph_finding documents with pending decisions
+curl -s 'https://ship.foramerica.dev/api/documents?document_type=fleetgraph_finding' \
+  -H "Cookie: <SESSION_COOKIE>" | jq '.[] | select(.properties.human_decision == null) | {id, title, properties}'
 ```
 
-Point out `human_decision: null`, `status: 'pending_decision'` in the finding.
+Pick one. Point out `human_decision: null` in the finding.
 
 > "This finding proposes reassigning work. The graph paused here — it wrote
 > the finding, surfaced it, and waited."
@@ -108,15 +111,12 @@ Point out `human_decision: null`, `status: 'pending_decision'` in the finding.
 **Action:** Dismiss it:
 
 ```bash
-curl -X POST https://fleetgraph.foramerica.dev/api/fleetgraph/findings/<FINDING_ID>/decide \
+curl -s -X POST https://fleetgraph.foramerica.dev/api/fleetgraph/findings/<FINDING_ID>/decide \
   -H "Content-Type: application/json" \
-  -d '{"decision": "dismiss"}'
+  -d '{"decision": "dismiss"}' | jq
 ```
 
-Response will show `{ "status": "dismissed", "findingId": "<id>" }`.
-
-> Note: No auth required on this endpoint — it uses the service client
-> internally. This is a known gap (bd-196) for post-MVP.
+Response: `{ "status": "dismissed", "findingId": "<id>" }`.
 
 > "I dismissed it. The finding stays in the record for audit, but the agent
 > won't execute the action. If I'd confirmed, it would have made the change
