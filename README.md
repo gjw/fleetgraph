@@ -17,6 +17,12 @@ pnpm build:shared
 pnpm dev
 ```
 
+## Public LangGraph Traces
+
+https://smith.langchain.com/public/66289fad-0f58-4c62-b53f-f93f6d0ad98b/r
+
+https://smith.langchain.com/public/03437ab1-8cbd-4178-8064-12daa759df6a/r
+
 ## Seeding Test Data
 
 FleetGraph demo scenarios require specific Ship data. Seeding is a two-step process:
