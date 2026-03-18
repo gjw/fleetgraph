@@ -6,6 +6,7 @@ module.exports = {
       script: 'dist/index.js',
       env: {
         PORT: 3000,
+        FLEETGRAPH_URL: 'http://127.0.0.1:3100',
       },
     },
     {
