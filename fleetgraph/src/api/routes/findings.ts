@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import type { Request, Response, Router as RouterType } from 'express';
 import { getProactiveClient } from '../../ship/factory.js';
+import { executeMutation } from '../../graph/nodes/execute.js';
+import type { ProposedAction } from '../../graph/state.js';
 
 interface DecideRequest {
   decision: 'confirm' | 'dismiss';
@@ -60,13 +62,22 @@ export function createFindingsRouter(): RouterType {
       return;
     }
 
-    // Confirm path: mark as confirmed, execute action (stub for MVP), then resolve
+    // Confirm path: execute the proposed action, then mark as resolved
+    const proposedAction = props.proposed_action as ProposedAction | null;
+
+    let executionResult: Record<string, unknown> = { skipped: true, reason: 'No proposed action' };
+
+    if (proposedAction && proposedAction.type && proposedAction.params) {
+      console.log(`[findings] executing action: ${proposedAction.type} for finding ${id}`);
+      executionResult = await executeMutation(client, proposedAction);
+    }
+
     const confirmResult = await client.updateDocument(id, {
       properties: {
         ...props,
         human_decision: 'confirmed',
         status: 'resolved',
-        execution_result: { stubbed: true, executed_at: new Date().toISOString() },
+        execution_result: executionResult,
       },
     });
 
@@ -75,11 +86,11 @@ export function createFindingsRouter(): RouterType {
       return;
     }
 
-    console.log(`[findings] confirmed finding ${id} — action executed (stub)`);
+    console.log(`[findings] confirmed finding ${id} — action executed`);
     res.json({
       status: 'confirmed',
       findingId: id,
-      executionResult: { stubbed: true },
+      executionResult,
     });
   });
 
