@@ -38,13 +38,15 @@ async function migrate() {
     // Step 1: Run schema.sql for initial setup
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf-8');
+    let freshDatabase = false;
     try {
       await pool.query(schema);
-      console.log('✅ Schema applied');
+      console.log('✅ Schema applied (fresh database)');
+      freshDatabase = true;
     } catch (schemaErr) {
       const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
       if (msg.includes('already exists')) {
-        console.log('Database schema already exists, continuing...');
+        console.log('Database schema already exists, continuing with migrations...');
       } else {
         throw schemaErr;
       }
@@ -58,11 +60,7 @@ async function migrate() {
       )
     `);
 
-    // Step 3: Get list of already-applied migrations
-    const appliedResult = await pool.query('SELECT version FROM schema_migrations ORDER BY version');
-    const appliedMigrations = new Set(appliedResult.rows.map(r => r.version));
-
-    // Step 4: Find and run pending migrations
+    // Step 3: Find migration files
     const migrationsDir = join(__dirname, 'migrations');
     let migrationFiles: string[] = [];
 
@@ -74,6 +72,35 @@ async function migrate() {
       console.log('ℹ️  No migrations directory found');
     }
 
+    // Step 4: On fresh database, schema.sql already incorporates all migrations.
+    // Mark them all as applied so they don't re-run and conflict.
+    if (freshDatabase && migrationFiles.length > 0) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const file of migrationFiles) {
+          const version = file.replace('.sql', '');
+          await client.query(
+            'INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING',
+            [version],
+          );
+        }
+        await client.query('COMMIT');
+        console.log(`✅ Fresh database — marked ${migrationFiles.length} migrations as applied`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+      return;
+    }
+
+    // Step 5: Get list of already-applied migrations
+    const appliedResult = await pool.query('SELECT version FROM schema_migrations ORDER BY version');
+    const appliedMigrations = new Set(appliedResult.rows.map(r => r.version));
+
+    // Step 6: Run pending migrations
     let migrationsRun = 0;
     for (const file of migrationFiles) {
       const version = file.replace('.sql', '');
