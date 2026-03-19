@@ -1,5 +1,6 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiPost } from '@/lib/api';
+import { findingsKeys } from '@/hooks/useFindingsQuery';
 
 interface ChatRequest {
   message: string;
@@ -51,6 +52,7 @@ export function useFleetGraphChat() {
 }
 
 export function useFleetGraphDecide() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ findingId, decision }: DecideRequest): Promise<DecideResponse> => {
       const res = await apiPost(`/api/fleetgraph/findings/${findingId}/decide`, { decision });
@@ -59,6 +61,9 @@ export function useFleetGraphDecide() {
         throw new Error(err.error || 'Decision failed');
       }
       return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: findingsKeys.all });
     },
   });
 }

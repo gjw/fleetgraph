@@ -46,6 +46,7 @@ const AdminDashboardPage = lazy(() => import('@/pages/AdminDashboard').then(m =>
 const AdminWorkspaceDetailPage = lazy(() => import('@/pages/AdminWorkspaceDetail').then(m => ({ default: m.AdminWorkspaceDetailPage })));
 const WorkspaceSettingsPage = lazy(() => import('@/pages/WorkspaceSettings').then(m => ({ default: m.WorkspaceSettingsPage })));
 const ConvertedDocumentsPage = lazy(() => import('@/pages/ConvertedDocuments').then(m => ({ default: m.ConvertedDocumentsPage })));
+const FindingsPage = lazy(() => import('@/pages/FindingsPage').then(m => ({ default: m.FindingsPage })));
 
 /**
  * Redirect component for type-specific routes to canonical /documents/:id
@@ -250,6 +251,7 @@ function AppRoutes() {
         {/* Person profile stays in Teams context - no redirect to /documents */}
         <Route path="team/:id" element={<PersonEditorPage />} />
         <Route path="feedback/:id" element={<FeedbackEditorPage />} />
+        <Route path="findings" element={<FindingsPage />} />
         <Route path="settings" element={<WorkspaceSettingsPage />} />
         <Route path="settings/conversions" element={<ConvertedDocumentsPage />} />
       </Route>
