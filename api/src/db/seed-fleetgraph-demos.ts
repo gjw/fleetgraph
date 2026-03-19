@@ -1706,6 +1706,26 @@ async function seedFleetGraphDemos() {
       [workspaceId, s3Sprints.map(s => s.id).concat([currentS3Sprint.id])],
     );
 
+    // ── FleetGraph service API token ────────────────────────────────────────
+    // FleetGraph's proactive mode authenticates to Ship via a service account
+    // API token. On a fresh database this token doesn't exist, so all fetch
+    // nodes fail silently. Create it idempotently with a deterministic hash.
+    const FG_TOKEN = 'ship_e0bbaa6e7777a80520f7addb0926226c047e98c9777b4e1e24367b777e521e2f';
+    const tokenHash = createHash('sha256').update(FG_TOKEN).digest('hex');
+    const tokenPrefix = FG_TOKEN.slice(0, 12);
+    const devUserId = users['dev@ship.local']?.userId;
+    if (devUserId) {
+      await pool.query(
+        `INSERT INTO api_tokens (user_id, workspace_id, name, token_hash, token_prefix)
+         VALUES ($1, $2, 'FleetGraph Service', $3, $4)
+         ON CONFLICT (user_id, workspace_id, name) DO NOTHING`,
+        [devUserId, workspaceId, tokenHash, tokenPrefix],
+      );
+      console.log('✅ FleetGraph service API token');
+    } else {
+      console.warn('⚠️  dev@ship.local not found — skipping FleetGraph API token');
+    }
+
     console.log('\n🎉 FleetGraph demo seed complete!');
     console.log('\n   Documents by type:');
     for (const row of counts.rows) {
