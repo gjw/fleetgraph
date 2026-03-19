@@ -27,6 +27,7 @@ export function loadConfig(): FleetGraphConfig {
   // Set the env vars the LangSmith SDK needs to auto-initialize tracing
   process.env['LANGCHAIN_TRACING_V2'] = 'true';
   process.env['LANGCHAIN_API_KEY'] = required('LANGSMITH_API_KEY');
+  process.env['LANGCHAIN_PROJECT'] = process.env['LANGSMITH_PROJECT'] ?? 'fleetgraph';
 
   return {
     openaiApiKey: required('OPENAI_API_KEY'),
