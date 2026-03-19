@@ -270,12 +270,17 @@ export async function reasoningNode(
 
   console.log('[reasoning] calling GPT-4o for workspace analysis...');
 
-  const result = await structured.invoke([
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: buildUserPrompt(state) },
-  ]);
+  try {
+    const result = await structured.invoke([
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: buildUserPrompt(state) },
+    ]);
 
-  console.log(`[reasoning] produced ${result.findings.length} findings`);
-
-  return { findings: result.findings };
+    console.log(`[reasoning] produced ${result.findings.length} findings`);
+    return { findings: result.findings };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[reasoning] LLM call failed: ${message}`);
+    return { findings: [], fetchErrors: { reasoning: message } };
+  }
 }

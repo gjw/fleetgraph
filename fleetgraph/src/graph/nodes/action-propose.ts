@@ -89,23 +89,29 @@ export async function actionProposeNode(
     `[action-propose] extracting mutation from: "${state.proposedAction.description}"`,
   );
 
-  const result = await structured.invoke([
-    { role: 'system', content: SYSTEM_PROMPT },
-    { role: 'user', content: JSON.stringify(context, null, 2) },
-  ]);
+  try {
+    const result = await structured.invoke([
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: JSON.stringify(context, null, 2) },
+    ]);
 
-  console.log(
-    `[action-propose] mutation: ${result.mutation_type} on ${result.target_entity_id}`,
-  );
+    console.log(
+      `[action-propose] mutation: ${result.mutation_type} on ${result.target_entity_id}`,
+    );
 
-  return {
-    proposedAction: {
-      type: result.mutation_type,
-      params: {
-        target_entity_id: result.target_entity_id,
-        ...result.params,
+    return {
+      proposedAction: {
+        type: result.mutation_type,
+        params: {
+          target_entity_id: result.target_entity_id,
+          ...result.params,
+        },
+        description: state.proposedAction.description,
       },
-      description: state.proposedAction.description,
-    },
-  };
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[action-propose] LLM call failed: ${message}`);
+    return { fetchErrors: { actionPropose: message } };
+  }
 }

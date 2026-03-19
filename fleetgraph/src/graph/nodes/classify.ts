@@ -79,13 +79,20 @@ export async function classifyNode(
     `[classify] calling GPT-4o-mini to classify ${state.findings.length} findings...`,
   );
 
-  const result = await structured.invoke([
-    { role: 'system', content: SYSTEM_PROMPT },
-    {
-      role: 'user',
-      content: `Classify these findings:\n\n${JSON.stringify(findingsSummary, null, 2)}`,
-    },
-  ]);
+  let result;
+  try {
+    result = await structured.invoke([
+      { role: 'system', content: SYSTEM_PROMPT },
+      {
+        role: 'user',
+        content: `Classify these findings:\n\n${JSON.stringify(findingsSummary, null, 2)}`,
+      },
+    ]);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[classify] LLM call failed: ${message}`);
+    return { classification: 'clean' as const, fetchErrors: { classify: message } };
+  }
 
   console.log(`[classify] classification=${result.classification}`);
 
