@@ -54,6 +54,20 @@ export const GraphState = Annotation.Root({
     default: () => null,
   }),
 
+  // Context associations (resolved by context node for on-demand scoping)
+  contextSprintId: Annotation<string | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+  contextProjectId: Annotation<string | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+  contextProgramId: Annotation<string | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
   // Fetched data
   issues: Annotation<ShipIssue[]>({
     reducer: (_prev, next) => next,

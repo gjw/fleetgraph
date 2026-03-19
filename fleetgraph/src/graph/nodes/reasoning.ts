@@ -222,7 +222,15 @@ function buildUserPrompt(state: GraphStateType): string {
     if (state.documentId) {
       preamble += `\nThey are viewing document ID: ${state.documentId} (type: ${state.documentType ?? 'unknown'}).`;
     }
-    preamble += '\nAnalyze the workspace data below to answer their question. Produce findings only if relevant to their question.';
+    preamble += `
+
+## On-demand constraints
+
+- Focus ONLY on data relevant to the user's question. The data below is already scoped to what they're viewing.
+- If the question is not about project data (e.g., greetings, off-topic), return an empty findings array.
+- Do NOT produce a dump of all issues as findings. Only flag genuine problems relevant to the user's context.
+- If the user asks about a specific entity, findings should relate to that entity and its immediate neighbors (same sprint, same project).
+- Prefer fewer, higher-quality findings over comprehensive coverage.`;
   }
 
   return `${preamble}\n\n${sections.join('\n\n')}`;

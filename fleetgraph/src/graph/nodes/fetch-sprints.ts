@@ -6,10 +6,7 @@ import type { ShipSprint, ShipSprintIssue } from '../../ship/index.js';
  * Fetch sprint data scoped by mode.
  *
  * Proactive: all projects → active sprints → sprint issues + scope changes.
- * On-demand: same data (sprints provide context for any question).
- *   For retro scenarios, also fetches sprint documents.
- *
- * Only fetches sprint issues for active sprints to limit data volume.
+ * On-demand: scoped to context — specific sprint, project's sprints, or program's projects.
  */
 export async function fetchSprintsNode(
   state: GraphStateType,
@@ -20,9 +17,17 @@ export async function fetchSprintsNode(
     return { fetchErrors: { 'fetch-sprints': 'No Ship client configured' } };
   }
 
+  if (state.mode === 'on_demand') {
+    return fetchOnDemandSprints(state);
+  }
+
+  return fetchProactiveSprints();
+}
+
+async function fetchProactiveSprints(): Promise<Partial<GraphUpdateType>> {
+  const client = getProactiveClient()!;
   const errors: Record<string, string> = {};
 
-  // Get all projects to discover their sprints
   const projectsResult = await client.getProjects();
   if (projectsResult.error) {
     console.log(`[fetch-sprints] error fetching projects: ${projectsResult.error.message}`);
@@ -48,7 +53,6 @@ export async function fetchSprintsNode(
       }
       allSprints.push(sprintResult.data);
 
-      // Only fetch sprint issues for active sprints (reduces data volume)
       if (sprintResult.data.status === 'active') {
         const issuesResult = await client.getSprintIssues(ps.id);
         if (issuesResult.error) {
@@ -60,7 +64,6 @@ export async function fetchSprintsNode(
     }
   }
 
-  // Scope changes for all active sprints (critical for scope_creep detection)
   const activeSprints = allSprints.filter(s => s.status === 'active');
   const scopeChanges: GraphUpdateType['scopeChanges'] = [];
 
@@ -76,7 +79,7 @@ export async function fetchSprintsNode(
   }
 
   console.log(
-    `[fetch-sprints] fetched ${allSprints.length} sprints (${activeSprints.length} active), ` +
+    `[fetch-sprints] proactive: ${allSprints.length} sprints (${activeSprints.length} active), ` +
     `${allSprintIssues.length} sprint issues, ${scopeChanges.length} scope change sets, ${projects.length} projects`,
   );
 
@@ -87,4 +90,98 @@ export async function fetchSprintsNode(
     projects,
     ...(Object.keys(errors).length > 0 ? { fetchErrors: errors } : {}),
   };
+}
+
+async function fetchOnDemandSprints(state: GraphStateType): Promise<Partial<GraphUpdateType>> {
+  const client = getProactiveClient()!;
+  const errors: Record<string, string> = {};
+
+  // If we have a specific sprint from context, just fetch that one
+  if (state.contextSprintId) {
+    const sprintResult = await client.getSprint(state.contextSprintId);
+    if (sprintResult.error) {
+      return { fetchErrors: { 'fetch-sprints': sprintResult.error.message } };
+    }
+
+    const sprint = sprintResult.data;
+    const sprintIssues: ShipSprintIssue[] = [];
+    const scopeChanges: GraphUpdateType['scopeChanges'] = [];
+
+    const issuesResult = await client.getSprintIssues(state.contextSprintId);
+    if (issuesResult.data) {
+      sprintIssues.push(...issuesResult.data);
+    }
+
+    if (sprint.status === 'active') {
+      const scResult = await client.getSprintScopeChanges(state.contextSprintId);
+      if (scResult.data) {
+        scopeChanges.push({
+          sprintId: sprint.id,
+          sprintName: sprint.name ?? `Sprint ${sprint.sprint_number}`,
+          ...scResult.data,
+        });
+      }
+    }
+
+    console.log(
+      `[fetch-sprints] on-demand (sprint): "${sprint.name}", ${sprintIssues.length} issues`,
+    );
+
+    return { sprints: [sprint], sprintIssues, scopeChanges };
+  }
+
+  // If we have a project, fetch its sprints
+  if (state.contextProjectId) {
+    const sprintsResult = await client.getProjectSprints(state.contextProjectId);
+    if (sprintsResult.error) {
+      return { fetchErrors: { 'fetch-sprints': sprintsResult.error.message } };
+    }
+
+    const allSprints: ShipSprint[] = [];
+    const allSprintIssues: ShipSprintIssue[] = [];
+    const scopeChanges: GraphUpdateType['scopeChanges'] = [];
+
+    for (const ps of sprintsResult.data) {
+      const sr = await client.getSprint(ps.id);
+      if (sr.error) {
+        errors[`sprint-${ps.id}`] = sr.error.message;
+        continue;
+      }
+      allSprints.push(sr.data);
+
+      if (sr.data.status === 'active') {
+        const ir = await client.getSprintIssues(ps.id);
+        if (ir.data) allSprintIssues.push(...ir.data);
+
+        const scr = await client.getSprintScopeChanges(ps.id);
+        if (scr.data) {
+          scopeChanges.push({
+            sprintId: sr.data.id,
+            sprintName: sr.data.name ?? `Sprint ${sr.data.sprint_number}`,
+            ...scr.data,
+          });
+        }
+      }
+    }
+
+    // Also fetch the project itself
+    const projectResult = await client.getProject(state.contextProjectId);
+    const projects = projectResult.data ? [projectResult.data] : [];
+
+    console.log(
+      `[fetch-sprints] on-demand (project): ${allSprints.length} sprints, ${allSprintIssues.length} sprint issues`,
+    );
+
+    return {
+      sprints: allSprints,
+      sprintIssues: allSprintIssues,
+      scopeChanges,
+      projects,
+      ...(Object.keys(errors).length > 0 ? { fetchErrors: errors } : {}),
+    };
+  }
+
+  // No specific context — fall back to proactive-style fetch
+  console.log('[fetch-sprints] on-demand: no sprint/project context, falling back to full fetch');
+  return fetchProactiveSprints();
 }
