@@ -38,8 +38,17 @@ async function migrate() {
     // Step 1: Run schema.sql for initial setup
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf-8');
-    await pool.query(schema);
-    console.log('✅ Schema applied');
+    try {
+      await pool.query(schema);
+      console.log('✅ Schema applied');
+    } catch (schemaErr) {
+      const msg = schemaErr instanceof Error ? schemaErr.message : String(schemaErr);
+      if (msg.includes('already exists')) {
+        console.log('Database schema already exists, continuing...');
+      } else {
+        throw schemaErr;
+      }
+    }
 
     // Step 2: Create migrations tracking table
     await pool.query(`
@@ -101,14 +110,8 @@ async function migrate() {
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    // "already exists" errors from schema.sql are fine
-    if (errorMessage.includes('already exists')) {
-      console.log('Database schema already exists, continuing...');
-    } else {
-      console.error('Database migration failed:', error);
-      process.exit(1);
-    }
+    console.error('Database migration failed:', error);
+    process.exit(1);
   } finally {
     await pool.end();
   }
