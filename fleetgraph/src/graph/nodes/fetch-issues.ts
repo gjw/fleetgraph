@@ -1,4 +1,5 @@
-import { getProactiveClient } from '../../ship/index.js';
+import { getClientForState } from '../../ship/index.js';
+import { ShipClient } from '../../ship/index.js';
 import type { GraphStateType, GraphUpdateType } from '../state.js';
 import type { ShipIssue } from '../../ship/index.js';
 
@@ -17,7 +18,7 @@ import type { ShipIssue } from '../../ship/index.js';
 export async function fetchIssuesNode(
   state: GraphStateType,
 ): Promise<Partial<GraphUpdateType>> {
-  const client = getProactiveClient();
+  const client = getClientForState(state);
   if (!client) {
     console.log('[fetch-issues] no client available (missing config)');
     return { fetchErrors: { 'fetch-issues': 'No Ship client configured' } };
@@ -36,15 +37,14 @@ export async function fetchIssuesNode(
     }
     issues = result.data;
   } else if (state.mode === 'on_demand') {
-    issues = await fetchOnDemandIssues(state);
+    issues = await fetchOnDemandIssues(client, state);
   }
 
   console.log(`[fetch-issues] fetched ${issues.length} issues (mode=${state.mode})`);
   return { issues };
 }
 
-async function fetchOnDemandIssues(state: GraphStateType): Promise<ShipIssue[]> {
-  const client = getProactiveClient()!;
+async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): Promise<ShipIssue[]> {
 
   // If viewing a specific issue, fetch it + its sprint context
   if (state.documentType === 'issue' && state.documentId) {

@@ -1,4 +1,4 @@
-import { getProactiveClient } from '../../ship/index.js';
+import { getClientForState } from '../../ship/index.js';
 import type { GraphStateType, GraphUpdateType } from '../state.js';
 
 /**
@@ -23,7 +23,7 @@ export async function contextNode(
     return {};
   }
 
-  const client = getProactiveClient();
+  const client = getClientForState(state);
   if (!client) return {};
 
   const [docResult, assocResult] = await Promise.all([

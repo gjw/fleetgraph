@@ -18,6 +18,7 @@ router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
         'Content-Type': 'application/json',
         'x-user-id': req.userId!,
         'x-workspace-id': req.workspaceId!,
+        'Cookie': req.headers.cookie || '',
       },
       body: JSON.stringify(req.body),
     });

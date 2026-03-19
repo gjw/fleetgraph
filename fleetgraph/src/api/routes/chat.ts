@@ -24,6 +24,7 @@ export function createChatRouter(graph: { invoke: (input: Record<string, unknown
 
     try {
       const userId = req.headers['x-user-id'] as string | undefined;
+      const sessionCookie = req.headers.cookie as string | undefined;
 
       const result = await graph.invoke({
         mode: 'on_demand',
@@ -32,6 +33,7 @@ export function createChatRouter(graph: { invoke: (input: Record<string, unknown
         documentId: body.documentId ?? null,
         documentType: body.documentType ?? null,
         userId: userId ?? null,
+        sessionCookie: sessionCookie ?? null,
       });
 
       res.json({

@@ -1,10 +1,10 @@
-import { getProactiveClient } from '../../ship/index.js';
+import { getClientForState } from '../../ship/index.js';
 import type { GraphStateType, GraphUpdateType } from '../state.js';
 
 export async function fetchTeamNode(
-  _state: GraphStateType,
+  state: GraphStateType,
 ): Promise<Partial<GraphUpdateType>> {
-  const client = getProactiveClient();
+  const client = getClientForState(state);
   if (!client) {
     console.log('[fetch-team] no client available (missing config)');
     return { fetchErrors: { 'fetch-team': 'No Ship client configured' } };

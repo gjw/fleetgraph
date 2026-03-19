@@ -99,6 +99,36 @@ already notified for this condition within the cooldown window.
 
 ---
 
+## Security
+
+### On-demand auth scoping
+
+FleetGraph operates in two auth modes with deliberately different trust boundaries:
+
+- **Proactive mode** (no user present): authenticates to Ship via a service account
+  Bearer token. Sees the entire workspace. Findings are written as system-generated
+  documents visible to all workspace members.
+
+- **On-demand mode** (user-initiated chat): authenticates to Ship using the requesting
+  user's forwarded session cookie. The LLM only reasons over data that user can see.
+
+**Why this matters:** Ship applies per-document visibility filtering
+(`visibility = 'workspace' OR created_by = $userId OR $isAdmin = TRUE`). A service
+account with admin privileges would expose private documents from other users to the
+LLM. In a federal PM tool, private documents may contain pre-decisional material
+protected under deliberative process privilege. An agent that ingests User B's private
+notes and surfaces reasoning to User A is a data leakage vector.
+
+**Architecture decision:** Read nodes (context, fetch-issues, fetch-sprints, fetch-team)
+use `getClientForState()`, which selects cookie-based auth for on-demand and token-based
+auth for proactive. Write nodes (persist, human-gate, execute) always use the service
+account — findings are system-generated workspace documents, not user-authored.
+
+This is a deliberate enforcement of ARCHITECTURE.md invariant #6: "On-demand mode sees
+only what the user sees."
+
+---
+
 ## Use Cases
 
 Seven use cases, derived from role-specific pain points — not from features.

@@ -1,4 +1,4 @@
-import { getProactiveClient } from '../../ship/index.js';
+import { getClientForState, ShipClient } from '../../ship/index.js';
 import type { GraphStateType, GraphUpdateType } from '../state.js';
 import type { ShipSprint, ShipSprintIssue } from '../../ship/index.js';
 
@@ -11,21 +11,20 @@ import type { ShipSprint, ShipSprintIssue } from '../../ship/index.js';
 export async function fetchSprintsNode(
   state: GraphStateType,
 ): Promise<Partial<GraphUpdateType>> {
-  const client = getProactiveClient();
+  const client = getClientForState(state);
   if (!client) {
     console.log('[fetch-sprints] no client available (missing config)');
     return { fetchErrors: { 'fetch-sprints': 'No Ship client configured' } };
   }
 
   if (state.mode === 'on_demand') {
-    return fetchOnDemandSprints(state);
+    return fetchOnDemandSprints(client, state);
   }
 
-  return fetchProactiveSprints();
+  return fetchProactiveSprints(client);
 }
 
-async function fetchProactiveSprints(): Promise<Partial<GraphUpdateType>> {
-  const client = getProactiveClient()!;
+async function fetchProactiveSprints(client: ShipClient): Promise<Partial<GraphUpdateType>> {
   const errors: Record<string, string> = {};
 
   const projectsResult = await client.getProjects();
@@ -92,8 +91,7 @@ async function fetchProactiveSprints(): Promise<Partial<GraphUpdateType>> {
   };
 }
 
-async function fetchOnDemandSprints(state: GraphStateType): Promise<Partial<GraphUpdateType>> {
-  const client = getProactiveClient()!;
+async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): Promise<Partial<GraphUpdateType>> {
   const errors: Record<string, string> = {};
 
   // If we have a specific sprint from context, just fetch that one
@@ -183,5 +181,5 @@ async function fetchOnDemandSprints(state: GraphStateType): Promise<Partial<Grap
 
   // No specific context — fall back to proactive-style fetch
   console.log('[fetch-sprints] on-demand: no sprint/project context, falling back to full fetch');
-  return fetchProactiveSprints();
+  return fetchProactiveSprints(client);
 }

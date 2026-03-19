@@ -53,6 +53,10 @@ export const GraphState = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => null,
   }),
+  sessionCookie: Annotation<string | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
 
   // Context associations (resolved by context node for on-demand scoping)
   contextSprintId: Annotation<string | null>({

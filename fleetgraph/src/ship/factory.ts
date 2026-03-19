@@ -26,3 +26,16 @@ export function getProactiveClient(): ShipClient | null {
 export function getOnDemandClient(baseUrl: string, cookie: string): ShipClient {
   return ShipClient.withCookie(baseUrl, cookie);
 }
+
+/**
+ * Returns the appropriate ShipClient based on graph state mode.
+ * On-demand with a session cookie → cookie-based client (user's auth).
+ * Otherwise → proactive client (service account).
+ */
+export function getClientForState(state: { mode: string; sessionCookie?: string | null }): ShipClient | null {
+  if (state.mode === 'on_demand' && state.sessionCookie) {
+    const config = loadConfig();
+    return getOnDemandClient(config.shipApiUrl, state.sessionCookie);
+  }
+  return getProactiveClient();
+}
