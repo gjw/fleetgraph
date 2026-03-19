@@ -193,6 +193,11 @@ export class ShipClient {
 
   // ── Documents ────────────────────────────────────────────────────────────
 
+  getDocuments(params?: { type?: string }): Promise<Result<ShipDocument[]>> {
+    const qs = params ? this.queryString({ ...params }) : '';
+    return this.get(`/api/documents${qs}`);
+  }
+
   getDocument(id: string): Promise<Result<ShipDocument>> {
     return this.get(`/api/documents/${id}`);
   }
