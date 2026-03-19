@@ -15,13 +15,18 @@ const MutationSchema = z.object({
     .string()
     .describe('UUID of the entity to mutate'),
   params: z
-    .record(z.string())
-    .describe(
-      'Mutation-specific params. ' +
-      'change_state: { new_state: "blocked"|"triage"|"open"|"in_progress"|"in_review" }. ' +
-      'reassign: { new_assignee_id: "<person UUID>" }. ' +
-      'add_comment: { content: "<comment text>" }.',
-    ),
+    .object({
+      new_state: z.string().nullable().describe(
+        'Required when mutation_type is change_state. Valid: blocked, triage, open, in_progress, in_review, done, cancelled. Null otherwise.',
+      ),
+      new_assignee_id: z.string().nullable().describe(
+        'Required when mutation_type is reassign. UUID of the person to assign to. Null otherwise.',
+      ),
+      content: z.string().nullable().describe(
+        'Required when mutation_type is add_comment. The comment text. Null otherwise.',
+      ),
+    })
+    .describe('Set the field matching mutation_type, null for the others.'),
 });
 
 const SYSTEM_PROMPT = `You extract a concrete Ship mutation from a FleetGraph finding's recommended action.
