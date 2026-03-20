@@ -2,6 +2,11 @@ import type { GraphStateType, GraphUpdateType, Finding } from '../state.js';
 import type { BelongsToType } from '@ship/shared';
 import { getProactiveClient } from '../../ship/factory.js';
 import type { ShipClient } from '../../ship/client.js';
+import {
+  loadExistingFindings,
+  shouldCreateFinding,
+  updateExistingFinding,
+} from './finding-dedup.js';
 
 function entityTypeToBelongsTo(
   entityType: Finding['affectedEntityType'],
@@ -69,9 +74,30 @@ export async function humanGateNode(
     return { findingDocIds: [], humanDecision: null };
   }
 
+  // Load existing findings for dedup
+  const existingFindings = await loadExistingFindings(client);
+  console.log(`[human-gate] loaded ${existingFindings.size} existing findings for dedup`);
+
   const findingDocIds: string[] = [];
+  let skippedCount = 0;
 
   for (const finding of state.findings) {
+    // Dedup check: does a finding with this type + entity already exist?
+    const dedupKey = `${finding.findingType}::${finding.affectedEntityId}`;
+    const existing = existingFindings.get(dedupKey);
+    if (existing) {
+      const decision = shouldCreateFinding(existing);
+      if (decision === 'skip') {
+        console.log(
+          `[human-gate] dedup hit: ${dedupKey} — updating in place`,
+        );
+        await updateExistingFinding(client, existing, finding, '[human-gate]');
+        skippedCount++;
+        findingDocIds.push(existing.id);
+        continue;
+      }
+    }
+
     const properties: Record<string, unknown> = {
       finding_type: finding.findingType,
       severity: finding.severity,
@@ -111,7 +137,7 @@ export async function humanGateNode(
   }
 
   console.log(
-    `[human-gate] persisted ${findingDocIds.length}/${state.findings.length} findings awaiting human decision`,
+    `[human-gate] persisted ${findingDocIds.length - skippedCount} new, ${skippedCount} skipped (dedup), ${findingDocIds.length}/${state.findings.length} total`,
   );
 
   return { findingDocIds, humanDecision: null };
