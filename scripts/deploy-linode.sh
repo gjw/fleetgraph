@@ -1,7 +1,14 @@
 #!/bin/bash
 # Deploy FleetGraph to Linode VPS
-# Usage: ssh into Linode, cd ~/fleetgraph, then run: ./scripts/deploy-linode.sh
+# Usage: ./scripts/deploy-linode.sh          # normal deploy
+#        ./scripts/deploy-linode.sh --fresh   # wipe DB, rebuild from scratch
 set -e
+
+FRESH=false
+if [ "$1" = "--fresh" ]; then
+  FRESH=true
+  echo "=== FRESH DEPLOY: wiping database ==="
+fi
 
 # Load environment variables (DATABASE_URL, etc.)
 if [ -f .env ]; then
@@ -9,6 +16,7 @@ if [ -f .env ]; then
   source .env
   set +a
 fi
+export DATABASE_URL="${DATABASE_URL:?DATABASE_URL must be set in .env}"
 
 echo "=== Pulling latest code ==="
 git pull
@@ -22,8 +30,28 @@ pnpm build:api
 pnpm build:web
 pnpm --filter fleetgraph build
 
+# Fresh deploy: stop services, wipe DB volume, restart postgres
+if [ "$FRESH" = true ]; then
+  echo "=== Stopping services ==="
+  pm2 stop all 2>/dev/null || true
+
+  echo "=== Wiping database ==="
+  docker compose down
+  docker volume rm fleetgraph_postgres_data 2>/dev/null || true
+  docker compose up -d
+  echo "Waiting for postgres..."
+  sleep 5
+fi
+
 echo "=== Running migrations ==="
 pnpm db:migrate
+
+# Fresh deploy: seed baseline + FleetGraph demo data
+if [ "$FRESH" = true ]; then
+  echo "=== Seeding database ==="
+  pnpm db:seed
+  pnpm db:seed:fg
+fi
 
 echo "=== Restarting services ==="
 pm2 delete ship-api ship-web fleetgraph 2>/dev/null || true
