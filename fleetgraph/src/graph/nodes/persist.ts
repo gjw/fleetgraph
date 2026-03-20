@@ -6,6 +6,7 @@ import {
   loadExistingFindings,
   shouldCreateFinding,
   updateExistingFinding,
+  resolvePersonEntityId,
 } from './finding-dedup.js';
 
 function entityTypeToBelongsTo(
@@ -83,6 +84,9 @@ export async function persistNode(
   let skippedCount = 0;
 
   for (const finding of state.findings) {
+    // Resolve person user UUIDs → person document UUIDs
+    resolvePersonEntityId(finding, state.team);
+
     // Dedup check: does a finding with this type + entity already exist?
     const dedupKey = `${finding.findingType}::${finding.affectedEntityId}`;
     const existing = existingFindings.get(dedupKey);

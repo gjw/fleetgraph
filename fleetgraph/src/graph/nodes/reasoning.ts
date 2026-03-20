@@ -14,7 +14,7 @@ const FindingSchema = z.object({
       severity: z.enum(['info', 'warning', 'critical']),
       affectedEntityId: z
         .string()
-        .describe('UUID of the affected issue, sprint, project, program, or person'),
+        .describe('UUID of the affected entity. For person findings, use personId from the team grid (the person document UUID), NOT assignee_id or user UUIDs from issues.'),
       affectedEntityType: z.enum(['issue', 'sprint', 'project', 'program', 'person']),
       title: z.string().describe('Short human-readable title, under 80 chars'),
       reasoning: z
@@ -82,7 +82,7 @@ If no clear owner exists, use an empty array.
 - Only report findings backed by the data provided. Never speculate beyond what the numbers show.
 - Severity guide: info = worth knowing, warning = should address soon, critical = blocking progress or creating risk.
 - If the data shows a healthy workspace with no problems, return an empty findings array. Do NOT invent findings.
-- Use the actual entity IDs from the data in affectedEntityId.
+- Use the actual entity IDs from the data in affectedEntityId. **For person findings (overloaded_member, accountability_debt), use personId from the team grid — NOT assignee_id or user UUIDs from issues.** The personId is the person document UUID that links correctly in the UI.
 - recommendedAction should describe a concrete Ship mutation (e.g., "Reassign issue to person X", "Change issue state to blocked") only when appropriate. Omit for purely informational findings.
 - Keep reasoning concise but specific — cite numbers from the data.`;
 

@@ -1,6 +1,6 @@
 import type { Finding } from '../state.js';
 import type { ShipClient } from '../../ship/client.js';
-import type { ShipDocument } from '../../ship/types.js';
+import type { ShipDocument, ShipTeamGrid } from '../../ship/types.js';
 
 export interface FindingProps {
   finding_type?: string;
@@ -64,6 +64,40 @@ export function shouldCreateFinding(existing: ShipDocument): 'skip' | 'create' {
 
   // Everything else: active, pending_decision, dismissed, confirmed, snoozed — skip
   return 'skip';
+}
+
+/**
+ * Resolve person findings that use user UUIDs to person document UUIDs.
+ * GPT-4o sometimes outputs assignee_id (users table) instead of personId
+ * (documents table). This ensures the finding references a real document.
+ *
+ * Mutates finding.affectedEntityId in place. Returns true if resolved.
+ */
+export function resolvePersonEntityId(
+  finding: Finding,
+  team: ShipTeamGrid | null,
+): boolean {
+  if (finding.affectedEntityType !== 'person' || !team) return false;
+
+  const people = team.users ?? team.people ?? [];
+
+  // Check if the ID already matches a personId (document UUID) — no resolution needed
+  if (people.some((p) => p.personId === finding.affectedEntityId)) return false;
+
+  // Try to match against user UUID (id field)
+  const match = people.find((p) => p.id === finding.affectedEntityId);
+  if (match) {
+    console.log(
+      `[dedup] resolved person user UUID ${finding.affectedEntityId} → person doc ${match.personId} (${match.name})`,
+    );
+    finding.affectedEntityId = match.personId;
+    return true;
+  }
+
+  console.warn(
+    `[dedup] person finding references unknown ID ${finding.affectedEntityId} — not in team grid`,
+  );
+  return false;
 }
 
 /**
