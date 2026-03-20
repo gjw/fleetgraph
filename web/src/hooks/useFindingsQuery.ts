@@ -8,9 +8,11 @@ export interface FindingDocument {
   properties: {
     finding_type: string;
     severity: 'info' | 'warning' | 'critical';
-    status: 'active' | 'dismissed' | 'snoozed' | 'resolved';
+    status: 'active' | 'dismissed' | 'snoozed' | 'resolved' | 'pending_decision';
     affected_entity_id: string;
     affected_entity_type: string;
+    affected_entity_name?: string;
+    summary?: string;
     proposed_action: {
       type: string;
       params: Record<string, unknown>;
@@ -57,7 +59,7 @@ export function useFindingsQuery() {
 export function useFindingsActiveCount(): number {
   const { data: findings } = useFindingsQuery();
   if (!findings) return 0;
-  return findings.filter(f => f.properties?.human_decision === null && f.properties?.status === 'active').length;
+  return findings.filter(f => f.properties?.human_decision === null && (f.properties?.status === 'active' || f.properties?.status === 'pending_decision')).length;
 }
 
 export function useInvalidateFindings() {

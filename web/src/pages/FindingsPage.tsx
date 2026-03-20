@@ -19,6 +19,12 @@ const severityBadge = {
   critical: 'bg-red-600/20 text-red-400',
 } as const;
 
+const actionLabels: Record<string, string> = {
+  reassign: 'Proposed: Reassign',
+  change_state: 'Proposed: Change status',
+  escalate: 'Proposed: Escalate',
+};
+
 const entityTypeRoute: Record<string, string> = {
   issue: '/documents/',
   sprint: '/documents/',
@@ -51,7 +57,7 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
   const invalidateFindings = useInvalidateFindings();
   const props = finding.properties;
   const severity = props?.severity || 'info';
-  const isUndecided = props?.human_decision === null && props?.status === 'active';
+  const isUndecided = props?.human_decision === null && (props?.status === 'active' || props?.status === 'pending_decision');
 
   const handleDecide = (decision: 'confirm' | 'dismiss') => {
     decideMutation.mutate(
@@ -80,6 +86,11 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
         </span>
       </div>
 
+      {/* Summary */}
+      {props?.summary && (
+        <p className="text-xs text-muted mt-1">{props.summary}</p>
+      )}
+
       {/* Affected entity link */}
       {props?.affected_entity_id && (
         <div className="flex items-center gap-1.5 text-xs">
@@ -88,15 +99,15 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
             to={getEntityLink(props.affected_entity_type, props.affected_entity_id)}
             className="text-accent hover:underline truncate"
           >
-            {props.affected_entity_type} {props.affected_entity_id.slice(0, 8)}...
+            {props.affected_entity_name ?? `${props.affected_entity_type} ${props.affected_entity_id.slice(0, 8)}...`}
           </Link>
         </div>
       )}
 
       {/* Proposed action */}
-      {props?.proposed_action && (
+      {props?.proposed_action && props.proposed_action.type !== 'add_comment' && (
         <p className="text-xs text-muted italic">
-          Proposed: {props.proposed_action.type}
+          {actionLabels[props.proposed_action.type] ?? `Proposed: ${props.proposed_action.type}`}
         </p>
       )}
 
@@ -159,7 +170,7 @@ export function FindingsPage() {
   const filtered = (findings || []).filter(f => {
     const props = f.properties;
     switch (activeTab) {
-      case 'active': return props?.human_decision === null && props?.status === 'active';
+      case 'active': return props?.human_decision === null && (props?.status === 'active' || props?.status === 'pending_decision');
       case 'confirmed': return props?.human_decision === 'confirmed';
       case 'dismissed': return props?.human_decision === 'dismissed';
       default: return true;
@@ -168,7 +179,7 @@ export function FindingsPage() {
 
   const counts = {
     all: findings?.length || 0,
-    active: findings?.filter(f => f.properties?.human_decision === null && f.properties?.status === 'active').length || 0,
+    active: findings?.filter(f => f.properties?.human_decision === null && (f.properties?.status === 'active' || f.properties?.status === 'pending_decision')).length || 0,
     confirmed: findings?.filter(f => f.properties?.human_decision === 'confirmed').length || 0,
     dismissed: findings?.filter(f => f.properties?.human_decision === 'dismissed').length || 0,
   };
