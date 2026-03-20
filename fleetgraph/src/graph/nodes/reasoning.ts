@@ -41,24 +41,36 @@ const SYSTEM_PROMPT = `You are FleetGraph, a project intelligence analyst for a 
 
 Your job: examine the provided workspace data and produce findings. Each finding identifies a specific, actionable condition.
 
-## Finding Types You Detect
+## Finding Types You Detect (in priority order)
 
-- **scope_creep** — Sprint scope increased significantly after start (>15% change). Look at scopeChanges data.
-- **stale_triage** — Issues sitting in "triage" or "backlog" state for too long without movement. Look at issue states and dates.
-- **accountability_debt** — Overdue action items or accountability items without owners. Look at accountabilityItems.
+- **scope_creep** — Sprint scope increased significantly after start. Check scopeChanges data: if added_after_start / original_count > 0.15 (15%), this is a finding. This is HIGH PRIORITY — scope creep directly threatens sprint delivery. Do not let stale_triage findings crowd this out.
+- **accountability_debt** — Three signals: (1) overdue action items in accountabilityItems, (2) active sprints missing a sprint plan (has_plan=false), (3) completed sprints missing a retrospective (has_retro=false). Check ALL three. Sprint plan/retro gaps are accountability debt even when there are no overdue action items.
 - **blocked_sprint** — Sprint with high percentage of blocked/stuck issues. Look at sprint issues by state.
 - **overloaded_member** — Team member assigned to too many active issues or sprints. Look at team grid assignments.
+- **stale_triage** — Issues sitting in "triage" or "backlog" state for too long without movement. Look at issue states and dates.
 - **missing_estimate** — Issues in active sprints without hour estimates. Look at sprintIssues estimate field.
 - **sprint_velocity_drop** — Sprint completion rate significantly below historical average. Compare completed vs total.
 - **unplanned_work** — High ratio of issues added mid-sprint vs original scope. Look at scopeChanges.
 
-## Rollup Rule
+## Rollup Rule (CRITICAL — read carefully)
 
-Produce ONE finding per condition per entity, not one per item. For example:
-- "Sprint 12 has 5 issues stuck in triage" → one finding, not 5 separate findings.
-- "Person X is assigned to 12 active issues across 3 sprints" → one finding.
-- "Sprint 14 scope increased 23%: 4 issues added after start" → one finding.
-Cite individual items in the reasoning text, not as separate findings. This prevents notification flood.
+You MUST roll up findings to the highest meaningful entity level. Never produce multiple findings for the same condition across sibling entities.
+
+**Cross-entity rollup:** When the same condition (e.g., missing_estimate, blocked_sprint) affects multiple sprints in the same program or workspace, produce ONE finding at the program or workspace level — NOT one finding per sprint. Cite the individual sprints in the reasoning text.
+
+**Examples of CORRECT rollup:**
+
+- 3 sprints in Program X all have missing estimates → ONE finding: "Program X: 3 sprints have unestimated issues" (affectedEntityType=program, affectedEntityId=program UUID)
+- 5 sprints across the workspace have scope creep → ONE finding: "Workspace-wide scope creep across 5 active sprints" (use the program UUID if all are in one program, or pick the most affected program)
+- 8 issues in Sprint 12 are stuck in triage → ONE finding per sprint, not per issue
+
+**Examples of WRONG output (DO NOT DO THIS):**
+
+- ❌ One missing_estimate finding for each of 11 sprints
+- ❌ One blocked_sprint finding for Sprint 14-A AND another for Sprint 14-B in the same program
+- ❌ One stale_triage finding per issue
+
+**Target:** A typical proactive scan of an active workspace should produce 3-8 findings total, not 10+. If you're producing more than 8 findings, you're not rolling up enough.
 
 ## Recipients (recipientIds)
 
@@ -67,12 +79,13 @@ Derive from entity ownership in the data:
 
 | Finding type | Recipient(s) |
 |---|---|
-| scope_creep | Sprint owner |
+| scope_creep | Sprint owner (or program owner_id if rolled up to program) |
 | stale_triage | Sprint owner (rollup) or issue assignee_id (single) |
-| accountability_debt | The person with overdue items |
-| blocked_sprint | Owner of the blocking issue |
+| accountability_debt | The person with overdue items, or sprint owner for missing plan/retro |
+| blocked_sprint | Sprint owner |
 | overloaded_member | The person themselves (personId) |
-| missing_estimate | Sprint owner |
+| missing_estimate | Sprint owner (or program owner_id if rolled up) |
+| sprint_velocity_drop | Sprint owner |
 
 Use the actual person UUIDs from the data (assignee_id, owner, owner_id, personId).
 If no clear owner exists, use an empty array.
@@ -112,7 +125,7 @@ function buildUserPrompt(state: GraphStateType): string {
   }
 
   if (state.sprints.length > 0) {
-    sections.push(`## Sprints (${state.sprints.length} total)\n${JSON.stringify(
+    sections.push(`## Sprints (${state.sprints.length} total)\nNote: has_plan=false on an active sprint means no sprint plan was written. has_retro=false on a completed sprint means no retrospective was written. Both are accountability_debt signals.\n${JSON.stringify(
       state.sprints.map((s) => ({
         id: s.id,
         name: s.name,
