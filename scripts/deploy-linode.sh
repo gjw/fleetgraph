@@ -36,8 +36,7 @@ if [ "$FRESH" = true ]; then
   pm2 stop all 2>/dev/null || true
 
   echo "=== Wiping database ==="
-  docker compose down
-  docker volume rm fleetgraph_postgres_data 2>/dev/null || true
+  docker compose down -v
   docker compose up -d
   echo "Waiting for postgres..."
   sleep 5
