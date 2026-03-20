@@ -173,6 +173,56 @@ async function upsertAssociation(
   );
 }
 
+// ── Sprint dedup helper ────────────────────────────────────────────────────
+// Looks up existing sprint by (program_id, sprint_number). Creates only if
+// none exists. Prevents duplicate sprints when multiple scenarios share a week.
+
+async function getOrCreateSprint(
+  pool: pg.Pool,
+  workspaceId: string,
+  programId: string,
+  sprintNumber: number,
+  opts: {
+    title?: string;
+    owner_id?: string;
+    project_id?: string;
+    assignee_ids?: string[];
+    plan?: string;
+    confidence?: number;
+    status?: string;
+    createdBy?: string;
+    createdAt?: Date;
+  },
+): Promise<string> {
+  const existing = await pool.query(
+    `SELECT d.id FROM documents d
+     JOIN document_associations da ON da.document_id = d.id
+       AND da.relationship_type = 'program' AND da.related_id = $1
+     WHERE d.workspace_id = $2 AND d.document_type = 'sprint'
+       AND (d.properties->>'sprint_number')::int = $3
+     LIMIT 1`,
+    [programId, workspaceId, sprintNumber],
+  );
+
+  if (existing.rows.length > 0) {
+    return existing.rows[0].id;
+  }
+
+  const id = demoId(`sprint:${programId}:${sprintNumber}`);
+  await upsertDoc(pool, id, workspaceId, 'sprint', opts.title ?? `Week ${sprintNumber}`, {
+    sprint_number: sprintNumber,
+    owner_id: opts.owner_id ?? null,
+    project_id: opts.project_id ?? null,
+    assignee_ids: opts.assignee_ids ?? [],
+    plan: opts.plan ?? `Week ${sprintNumber}`,
+    confidence: opts.confidence ?? 75,
+    status: opts.status ?? 'active',
+  }, { createdBy: opts.createdBy, createdAt: opts.createdAt });
+  await upsertAssociation(pool, id, programId, 'program');
+
+  return id;
+}
+
 // ── User lookup ─────────────────────────────────────────────────────────────
 
 interface UserRef {
@@ -344,22 +394,20 @@ async function seedFleetGraphDemos() {
 
     console.log('\n── S1: Sprint Scope Creep ──');
 
-    const s1SprintId = demoId('s1:sprint');
     const s1SprintNumber = currentSprintNumber;
     const sprintStartDay = daysAgo(7);
 
-    await upsertDoc(pool, s1SprintId, workspaceId, 'sprint', `Week ${s1SprintNumber}`, {
-      sprint_number: s1SprintNumber,
+    const s1SprintId = await getOrCreateSprint(pool, workspaceId, programId, s1SprintNumber, {
       owner_id: pm.userId,
       project_id: projectIds.sprintOps,
       assignee_ids: [pm.personDocId, engineer1.personDocId, engineer2.personDocId, scopeAdder.personDocId],
       plan: 'Deliver core sprint tracking features and stabilize API layer.',
-      success_criteria: 'All P0 issues done, no regressions in test suite.',
       confidence: 72,
       status: 'active',
-    }, { createdBy: pm.userId, createdAt: daysAgo(8) });
+      createdBy: pm.userId,
+      createdAt: daysAgo(8),
+    });
     await upsertAssociation(pool, s1SprintId, projectIds.sprintOps, 'project');
-    await upsertAssociation(pool, s1SprintId, programId, 'program');
 
     // 8 pre-start issues (created before sprint began)
     const s1PreIssues = [
@@ -426,20 +474,18 @@ async function seedFleetGraphDemos() {
     // ── S1 Confounders ──
 
     // Confounder 1: Clean sprint with NO scope creep (all issues pre-start)
-    const s1CleanSprintId = demoId('s1:clean-sprint');
     const s1CleanSprintNumber = currentSprintNumber - 1;
-    await upsertDoc(pool, s1CleanSprintId, workspaceId, 'sprint', `Week ${s1CleanSprintNumber}`, {
-      sprint_number: s1CleanSprintNumber,
+    const s1CleanSprintId = await getOrCreateSprint(pool, workspaceId, programId, s1CleanSprintNumber, {
       owner_id: pm.userId,
       project_id: projectIds.sprintOps,
       assignee_ids: [pm.personDocId, engineer1.personDocId],
       plan: 'Stabilize existing features, no new work.',
-      success_criteria: 'All planned items completed.',
       confidence: 90,
       status: 'completed',
-    }, { createdBy: pm.userId, createdAt: daysAgo(15) });
+      createdBy: pm.userId,
+      createdAt: daysAgo(15),
+    });
     await upsertAssociation(pool, s1CleanSprintId, projectIds.sprintOps, 'project');
-    await upsertAssociation(pool, s1CleanSprintId, programId, 'program');
 
     for (let i = 0; i < 6; i++) {
       const id = demoId(`s1:clean-issue:${i}`);
@@ -462,19 +508,18 @@ async function seedFleetGraphDemos() {
 
     // Confounder 2: Historical sprint that HAD scope creep but is completed
     // (should not re-trigger — it's done)
-    const s1HistSprintId = demoId('s1:hist-sprint');
     const s1HistSprintNumber = currentSprintNumber - 2;
-    await upsertDoc(pool, s1HistSprintId, workspaceId, 'sprint', `Week ${s1HistSprintNumber}`, {
-      sprint_number: s1HistSprintNumber,
+    const s1HistSprintId = await getOrCreateSprint(pool, workspaceId, programId, s1HistSprintNumber, {
       owner_id: pm.userId,
       project_id: projectIds.sprintOps,
       assignee_ids: [pm.personDocId, engineer2.personDocId],
       plan: 'Historical sprint with scope issues.',
       confidence: 60,
       status: 'completed',
-    }, { createdBy: pm.userId, createdAt: daysAgo(22) });
+      createdBy: pm.userId,
+      createdAt: daysAgo(22),
+    });
     await upsertAssociation(pool, s1HistSprintId, projectIds.sprintOps, 'project');
-    await upsertAssociation(pool, s1HistSprintId, programId, 'program');
 
     // 4 pre + 3 post (historical creep) — all done now
     for (let i = 0; i < 7; i++) {
@@ -521,9 +566,7 @@ async function seedFleetGraphDemos() {
     const s3Sprints: Array<{ id: string; number: number; offset: number }> = [];
     for (let offset = -3; offset <= 0; offset++) {
       const sprintNum = currentSprintNumber + offset;
-      const id = demoId(`s3:sprint:${offset}`);
-      await upsertDoc(pool, id, workspaceId, 'sprint', `Week ${sprintNum}`, {
-        sprint_number: sprintNum,
+      const id = await getOrCreateSprint(pool, workspaceId, programId, sprintNum, {
         owner_id: director.userId,
         project_id: projectIds.teamHealth,
         assignee_ids: [
@@ -533,9 +576,10 @@ async function seedFleetGraphDemos() {
         plan: `Week ${sprintNum} team health tracking`,
         confidence: 80,
         status: offset < 0 ? 'completed' : 'active',
-      }, { createdBy: director.userId, createdAt: daysAgo((0 - offset) * 7 + 1) });
+        createdBy: director.userId,
+        createdAt: daysAgo((0 - offset) * 7 + 1),
+      });
       await upsertAssociation(pool, id, projectIds.teamHealth, 'project');
-      await upsertAssociation(pool, id, programId, 'program');
       s3Sprints.push({ id, number: sprintNum, offset });
     }
 
@@ -758,18 +802,17 @@ async function seedFleetGraphDemos() {
 
     console.log('\n── S4: Blocked Work Chain ──');
 
-    const s4SprintId = demoId('s4:sprint');
-    await upsertDoc(pool, s4SprintId, workspaceId, 'sprint', `Week ${currentSprintNumber}`, {
-      sprint_number: currentSprintNumber,
+    const s4SprintId = await getOrCreateSprint(pool, workspaceId, programId, currentSprintNumber, {
       owner_id: engineer1.userId,
       project_id: projectIds.platform,
       assignee_ids: [engineer1.personDocId, engineer2.personDocId, engineer3.personDocId],
       plan: 'Platform infrastructure improvements.',
       confidence: 65,
       status: 'active',
-    }, { createdBy: engineer1.userId, createdAt: daysAgo(7) });
+      createdBy: engineer1.userId,
+      createdAt: daysAgo(7),
+    });
     await upsertAssociation(pool, s4SprintId, projectIds.platform, 'project');
-    await upsertAssociation(pool, s4SprintId, programId, 'program');
 
     // The chain: A ← B ← C (each depends on the next)
     const issueAId = demoId('s4:issueA');
@@ -981,18 +1024,17 @@ async function seedFleetGraphDemos() {
 
     console.log('\n── S6: Smart Next Action ──');
 
-    const s6SprintId = demoId('s6:sprint');
-    await upsertDoc(pool, s6SprintId, workspaceId, 'sprint', `Week ${currentSprintNumber}`, {
-      sprint_number: currentSprintNumber,
+    const s6SprintId = await getOrCreateSprint(pool, workspaceId, programId, currentSprintNumber, {
       owner_id: pm.userId,
       project_id: projectIds.product,
       assignee_ids: [extraEngineer.personDocId, engineer1.personDocId, engineer2.personDocId],
       plan: 'Product feature sprint.',
       confidence: 70,
       status: 'active',
-    }, { createdBy: pm.userId, createdAt: daysAgo(7) });
+      createdBy: pm.userId,
+      createdAt: daysAgo(7),
+    });
     await upsertAssociation(pool, s6SprintId, projectIds.product, 'project');
-    await upsertAssociation(pool, s6SprintId, programId, 'program');
 
     // Issue X: in_progress, nearly done, recent activity
     const issueXId = demoId('s6:issueX');
@@ -1206,18 +1248,17 @@ async function seedFleetGraphDemos() {
     const s7Sprints: Array<{ id: string; number: number; label: string }> = [];
     for (let i = 0; i < 4; i++) {
       const sprintNum = currentSprintNumber - 4 + i; // sprints 10-13 equivalent
-      const id = demoId(`s7:sprint:${i}`);
-      await upsertDoc(pool, id, workspaceId, 'sprint', `Week ${sprintNum}`, {
-        sprint_number: sprintNum,
+      const id = await getOrCreateSprint(pool, workspaceId, programId, sprintNum, {
         owner_id: retroAuthor.userId,
         project_id: projectIds.product,
         assignee_ids: [retroAuthor.personDocId, engineer1.personDocId, pm.personDocId],
         plan: `Week ${sprintNum} product development`,
         confidence: 75,
         status: 'completed',
-      }, { createdBy: retroAuthor.userId, createdAt: daysAgo(28 - i * 7) });
+        createdBy: retroAuthor.userId,
+        createdAt: daysAgo(28 - i * 7),
+      });
       await upsertAssociation(pool, id, projectIds.product, 'project');
-      await upsertAssociation(pool, id, programId, 'program');
       s7Sprints.push({ id, number: sprintNum, label: `Week ${sprintNum}` });
     }
 
@@ -1368,19 +1409,18 @@ async function seedFleetGraphDemos() {
     // ── S7 Confounders ──
 
     // Confounder 1: A retro mentioning deploy POSITIVELY
-    const s7PositiveRetroSprintId = demoId('s7:positive-sprint');
     const positiveSprintNum = currentSprintNumber - 5;
-    await upsertDoc(pool, s7PositiveRetroSprintId, workspaceId, 'sprint', `Week ${positiveSprintNum}`, {
-      sprint_number: positiveSprintNum,
+    const s7PositiveRetroSprintId = await getOrCreateSprint(pool, workspaceId, programId, positiveSprintNum, {
       owner_id: retroAuthor.userId,
       project_id: projectIds.product,
       assignee_ids: [retroAuthor.personDocId],
       plan: 'Earlier sprint.',
       confidence: 85,
       status: 'completed',
-    }, { createdBy: retroAuthor.userId, createdAt: daysAgo(35) });
+      createdBy: retroAuthor.userId,
+      createdAt: daysAgo(35),
+    });
     await upsertAssociation(pool, s7PositiveRetroSprintId, projectIds.product, 'project');
-    await upsertAssociation(pool, s7PositiveRetroSprintId, programId, 'program');
 
     const s7PositiveRetroId = demoId('s7:positive-retro');
     await upsertDoc(pool, s7PositiveRetroId, workspaceId, 'weekly_review', `Week ${positiveSprintNum} Review`, {}, {
@@ -1427,19 +1467,18 @@ async function seedFleetGraphDemos() {
     await upsertAssociation(pool, s7CompletedActionId, projectIds.product, 'project');
 
     // Confounder 4: A retro with zero negative patterns (pure green)
-    const s7GreenRetroSprintId = demoId('s7:green-sprint');
     const greenSprintNum = currentSprintNumber - 6;
-    await upsertDoc(pool, s7GreenRetroSprintId, workspaceId, 'sprint', `Week ${greenSprintNum}`, {
-      sprint_number: greenSprintNum,
+    const s7GreenRetroSprintId = await getOrCreateSprint(pool, workspaceId, programId, greenSprintNum, {
       owner_id: retroAuthor.userId,
       project_id: projectIds.product,
       assignee_ids: [retroAuthor.personDocId],
       plan: 'Smooth sprint.',
       confidence: 90,
       status: 'completed',
-    }, { createdBy: retroAuthor.userId, createdAt: daysAgo(42) });
+      createdBy: retroAuthor.userId,
+      createdAt: daysAgo(42),
+    });
     await upsertAssociation(pool, s7GreenRetroSprintId, projectIds.product, 'project');
-    await upsertAssociation(pool, s7GreenRetroSprintId, programId, 'program');
 
     const s7GreenRetroId = demoId('s7:green-retro');
     await upsertDoc(pool, s7GreenRetroId, workspaceId, 'weekly_review', `Week ${greenSprintNum} Review`, {}, {
@@ -1585,17 +1624,16 @@ async function seedFleetGraphDemos() {
 
     for (const sv of s5SprintVelocity) {
       const sprintNum = currentSprintNumber + sv.offset;
-      const sprintId = demoId(`s5:sprint:${sv.offset}`);
-      await upsertDoc(pool, sprintId, workspaceId, 'sprint', `Week ${sprintNum}`, {
-        sprint_number: sprintNum,
+      const sprintId = await getOrCreateSprint(pool, workspaceId, programId, sprintNum, {
         // owner_id intentionally missing (matches project missing owner)
         project_id: s5ProjectId,
         plan: 'Continue migration work.',
         confidence: 40,
         status: sv.offset < 0 ? 'completed' : 'active',
-      }, { createdBy: director.userId, createdAt: daysAgo((0 - sv.offset) * 7 + 1) });
+        createdBy: director.userId,
+        createdAt: daysAgo((0 - sv.offset) * 7 + 1),
+      });
       await upsertAssociation(pool, sprintId, s5ProjectId, 'project');
-      await upsertAssociation(pool, sprintId, programId, 'program');
 
       // Create issues for this sprint
       for (let i = 0; i < sv.total; i++) {
@@ -1647,17 +1685,16 @@ async function seedFleetGraphDemos() {
 
     for (const sv of s5HealthyVelocity) {
       const sprintNum = currentSprintNumber + sv.offset;
-      const sprintId = demoId(`s5:healthy-sprint:${sv.offset}`);
-      await upsertDoc(pool, sprintId, workspaceId, 'sprint', `Week ${sprintNum}`, {
-        sprint_number: sprintNum,
+      const sprintId = await getOrCreateSprint(pool, workspaceId, programId, sprintNum, {
         owner_id: pm.userId,
         project_id: s5HealthyProjectId,
         plan: 'Dashboard feature development.',
         confidence: 85,
         status: sv.offset < 0 ? 'completed' : 'active',
-      }, { createdBy: pm.userId, createdAt: daysAgo((0 - sv.offset) * 7 + 1) });
+        createdBy: pm.userId,
+        createdAt: daysAgo((0 - sv.offset) * 7 + 1),
+      });
       await upsertAssociation(pool, sprintId, s5HealthyProjectId, 'project');
-      await upsertAssociation(pool, sprintId, programId, 'program');
 
       for (let i = 0; i < sv.total; i++) {
         const isDone = i < sv.closed;
