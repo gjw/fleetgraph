@@ -97,6 +97,7 @@ function extractIssueFromRow(row: Record<string, unknown>) {
     is_system_generated: (props.is_system_generated as boolean) || false,
     accountability_target_id: (props.accountability_target_id as string) || null,
     accountability_type: (props.accountability_type as string) || null,
+    depends_on: Array.isArray(props.depends_on) ? props.depends_on as string[] : [],
     ticket_number: row.ticket_number as number,
     content: row.content,
     created_at: row.created_at as string,

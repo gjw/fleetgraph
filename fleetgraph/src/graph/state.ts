@@ -109,6 +109,10 @@ export const GraphState = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => [],
   }),
+  dependencyChain: Annotation<Array<{ id: string; title: string; state: string; dependsOn: string[] }>>({
+    reducer: (_prev, next) => next,
+    default: () => [],
+  }),
 
   // Fetch errors
   fetchErrors: Annotation<Record<string, string>>({

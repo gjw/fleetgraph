@@ -25,6 +25,7 @@ export async function fetchIssuesNode(
   }
 
   let issues: ShipIssue[] = [];
+  let dependencyChain: GraphUpdateType['dependencyChain'] = [];
 
   if (state.mode === 'proactive') {
     // Proactive: only active issues, not done/cancelled/archived
@@ -38,10 +39,15 @@ export async function fetchIssuesNode(
     issues = result.data;
   } else if (state.mode === 'on_demand') {
     issues = await fetchOnDemandIssues(client, state);
+
+    // For on-demand issue views, resolve the dependency chain
+    if (state.documentType === 'issue' && state.documentId) {
+      dependencyChain = await fetchDependencyChain(client, state.documentId);
+    }
   }
 
-  console.log(`[fetch-issues] fetched ${issues.length} issues (mode=${state.mode})`);
-  return { issues };
+  console.log(`[fetch-issues] fetched ${issues.length} issues, ${dependencyChain.length} deps (mode=${state.mode})`);
+  return { issues, dependencyChain };
 }
 
 async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): Promise<ShipIssue[]> {
@@ -112,4 +118,52 @@ async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): P
     state: 'triage,open,in_progress,in_review,blocked',
   });
   return result.data ?? [];
+}
+
+// ── Dependency chain fetching ───────────────────────────────────────────────
+
+interface DependencyNode {
+  id: string;
+  title: string;
+  state: string;
+  dependsOn: string[];
+}
+
+/**
+ * Fetch the dependency chain for an issue using the issue API (which now
+ * includes depends_on). Walks up to maxDepth levels deep.
+ */
+async function fetchDependencyChain(
+  client: ShipClient,
+  issueId: string,
+  maxDepth = 3,
+): Promise<DependencyNode[]> {
+  const visited = new Set<string>();
+  const chain: DependencyNode[] = [];
+
+  async function walk(id: string, depth: number): Promise<void> {
+    if (depth > maxDepth || visited.has(id)) return;
+    visited.add(id);
+
+    const result = await client.getIssue(id);
+    if (result.error || !result.data) return;
+
+    const issue = result.data;
+    const dependsOn = issue.depends_on ?? [];
+
+    chain.push({
+      id: issue.id,
+      title: issue.title,
+      state: issue.state,
+      dependsOn,
+    });
+
+    for (const depId of dependsOn) {
+      await walk(depId, depth + 1);
+    }
+  }
+
+  await walk(issueId, 0);
+  console.log(`[fetch-issues] dependency chain: ${chain.length} nodes (max depth ${maxDepth})`);
+  return chain;
 }

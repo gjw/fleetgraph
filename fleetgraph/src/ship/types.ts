@@ -46,6 +46,7 @@ export interface ShipIssue {
   created_at: string;
   updated_at: string;
   created_by: string;
+  depends_on?: string[];
   belongs_to?: ShipBelongsTo[];
 }
 

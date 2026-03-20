@@ -51,6 +51,7 @@ Your job: examine the provided workspace data and produce findings. Each finding
 - **missing_estimate** — Issues in active sprints without hour estimates. Look at sprintIssues estimate field.
 - **sprint_velocity_drop** — Sprint completion rate significantly below historical average. Compare completed vs total.
 - **unplanned_work** — High ratio of issues added mid-sprint vs original scope. Look at scopeChanges.
+- **blocked_chain** — An issue depends on another issue (via dependencyChain data) where the blocker is itself blocked, stuck, or unassigned. Look at the dependency chain: if issue A depends on B, and B's state is not in_progress/in_review/done, flag it. Longer chains (A→B→C all blocked) are higher severity.
 - **retro_patterns** — Recurring themes across multiple retrospectives. Look at retroContent for repeated blockers, unresolved action items, or systemic problems mentioned in 2+ retros. Only produce this finding when retro content is provided and a clear pattern spans multiple sprints.
 
 ## Rollup Rule (CRITICAL — read carefully)
@@ -87,6 +88,8 @@ Derive from entity ownership in the data:
 | overloaded_member | The person themselves (personId) |
 | missing_estimate | Sprint owner (or program owner_id if rolled up) |
 | sprint_velocity_drop | Sprint owner |
+| blocked_chain | Assignee of the blocked issue + assignee of the blocker |
+| retro_patterns | Sprint/program owner |
 
 Use the actual person UUIDs from the data (assignee_id, owner, owner_id, personId).
 If no clear owner exists, use an empty array.
@@ -219,6 +222,12 @@ function buildUserPrompt(state: GraphStateType): string {
     );
   }
 
+  if (state.dependencyChain.length > 0) {
+    sections.push(
+      `## Dependency Chain (${state.dependencyChain.length} nodes)\nEach node shows its depends_on links. Look for chains where blockers are themselves blocked or stuck.\n${JSON.stringify(state.dependencyChain, null, 2)}`,
+    );
+  }
+
   if (state.retroContent.length > 0) {
     sections.push(
       `## Retrospective Content (${state.retroContent.length} retros)\nLook for recurring themes, repeated blockers, or unresolved issues across these retrospectives.\n${state.retroContent
@@ -268,7 +277,8 @@ function hasData(state: GraphStateType): boolean {
     state.programs.length > 0 ||
     state.team !== null ||
     state.accountabilityItems !== null ||
-    state.retroContent.length > 0
+    state.retroContent.length > 0 ||
+    state.dependencyChain.length > 0
   );
 }
 
