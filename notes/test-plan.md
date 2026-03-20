@@ -1,441 +1,209 @@
-# FleetGraph Integration Test Plan
+# Early Submission Test Plan — Friday 2026-03-20
 
-**Purpose:** Chair builds genuine understanding of FleetGraph by walking each use case
-end-to-end. Test against Linode (agentforge) with real seeded data.
-
-**Date:** 2026-03-19 (updated after day's fixes)
+**Goal:** Capture fresh LangSmith traces and update FLEETGRAPH.md with Test Cases
+and Architecture Decisions sections. Due 11:59 PM tonight.
 
 ---
 
-## What Changed Today
+## Deliverables Checklist
 
-Before testing, know what was fixed — this affects what you expect to see:
-
-- **fg-3ah (closed):** On-demand scoping. userId now extracted from proxy headers.
-  Fetch nodes scope by sprint/project/program associations. Reasoning prompt is
-  tighter. The spaghetti problem should be fixed.
-- **fg-3aw (closed):** On-demand auth. Forwarded session cookie instead of service
-  account for on-demand reads. Users now only see data they have access to.
-  Proactive mode still uses service account (correct — system-generated findings).
-- **fg-1ml (closed):** Findings inbox. Nav link with badge count, filter tabs
-  (active/dismissed/all), confirm/dismiss actions inline, click-through to affected
-  entity.
-- **fg-32c (closed):** Migration runner fix. Schema.sql "already exists" errors
-  no longer kill subsequent migrations.
-
-**Still open (may affect test results):**
-
-- **fg-38a:** Duplicate of fg-3aw (on-demand auth) — may still be open if Warden
-  created it separately. Verify the fix landed.
-- **fg-3kh:** Reasoning enrichment. 5 detection gaps remain: S1 scope_creep
-  dominated by stale_triage, S3 accountability needs standup/plan/retro data,
-  S4 blocked_chain needs dependency fetching, S7 retro content not fetched,
-  persist person association uses user UUID not person doc UUID.
-- **fg-3ki:** Persist dedup doesn't handle `pending_decision` status from
-  human-gate. Dedup checks for `status='active'` but human-gate creates findings
-  with `status='pending_decision'`.
-- **fg-26l:** FLEETGRAPH.md claims WebSocket trigger that doesn't exist. Doc
-  integrity issue — won't affect functionality but matters for submission.
-- **fg-aom:** FLEETGRAPH.md error handling claims exceed implementation. Same —
-  doc integrity.
+- [ ] **Test Cases section in FLEETGRAPH.md** — fresh traces, current behavior
+- [ ] **Architecture Decisions section in FLEETGRAPH.md** — new section, doesn't exist yet
+- [ ] **Fresh deploy with latest code** (fg-39o acknowledge/snooze/approve if done)
+- [ ] **No video required** — PRD doesn't mention video for any submission
 
 ---
 
-## Prerequisites (BLOCKING)
+## Prerequisites
 
-### 1. Redeploy to Linode
+### 1. Deploy latest code
 
-Migrations are now applied (including 038_fleetgraph_document_types). Redeploy
-to pick up today's code fixes:
+If fg-39o (acknowledge/snooze/approve) is done, deploy it. Otherwise deploy
+what's merged. Use `--fresh` if the DB hasn't been wiped since the last round
+of fixes:
 
 ```bash
 ssh root@agentforge
 export PATH=/root/.nodenv/shims:/root/.nodenv/bin:$PATH
 cd ~/fleetgraph
-git pull
-pnpm install && pnpm build:shared && pnpm build:api && pnpm build:web && pnpm --filter fleetgraph build
-pm2 restart all
+./scripts/deploy-linode.sh --fresh
 ```
 
-### 2. Verify services are healthy
+### 2. Wait for first proactive scan (~5 min)
+
+Check findings populated:
 
 ```bash
-curl http://127.0.0.1:3000/health                    # ship-api
-curl http://127.0.0.1:3100/api/fleetgraph/health     # fleetgraph
+docker exec fleetgraph-postgres-1 psql -U ship -d ship_dev -c "
+SELECT count(*) as total,
+  count(DISTINCT (properties->>'finding_type', properties->>'affected_entity_id')) as unique
+FROM documents WHERE document_type = 'fleetgraph_finding';"
 ```
 
-### 3. Confirm seed data exists
+### 3. Verify dedup (wait for second scan, ~10 min total)
 
-```bash
-export DATABASE_URL=postgresql://ship:ship_dev_password@localhost:5432/ship_dev
-pnpm db:seed       # Ship baseline
-pnpm db:seed:fg    # FleetGraph demo scenarios
-```
+total should equal unique after both scans. May grow slightly (new conditions
+found on second pass) but no duplicates.
 
 ---
 
-## How to Read Results
+## Test Cases to Capture
 
-For each test, check three layers:
+The PRD requires: Ship state, expected output, LangSmith trace link.
+The grader verifies "your agent does what you said it would do."
 
-- **Ship UI** — Does the findings inbox show the finding? Can you confirm/dismiss?
-  Can you click through to the affected entity? Is the badge count correct?
-- **LangSmith** — Open the trace. Walk each node: what data was fetched, what the
-  LLM reasoned, how it classified, what was persisted.
-  Traces at: https://smith.langchain.com (project: fleetgraph)
-- **Database** — Spot-check findings:
-  ```sql
-  SELECT id, title, properties->>'finding_type', properties->>'severity',
-         properties->>'status', created_at
-  FROM documents WHERE document_type = 'fleetgraph_finding'
-  ORDER BY created_at DESC;
-  ```
+**Strategy:** Be honest about what works. Don't claim detections that are flaky.
+The current system reliably detects: stale triage, overloaded members, missing
+estimates, velocity drops, blocked sprints, accountability debt. Scope creep
+and retro mining are weaker (fg-3kh improvements may help).
 
----
+### TC-1: Proactive Workspace Scan (captures multiple detections)
 
-## Test Sequence
+**How:** Wait for 5-min poller or restart FleetGraph.
 
-Ordered simplest → most complex. Each test builds on understanding from the previous.
+**Ship state:** FleetGraph Demo program with seeded scenario data:
+- 6 issues in triage for 5-7 days (S2 seed data)
+- David Kim assigned 29 active issues across programs
+- Active Week 14 sprints with issues missing estimates
+- Sprint velocity declining across weeks 12-14
 
----
+**Expected output:** Rolled-up findings:
+- Stale triage backlog (one finding, not per-issue)
+- Overloaded member (David Kim)
+- Missing estimates in active weeks
+- Sprint velocity drop
 
-### Test 1: Health Check + Proactive Scan Basics
+**Trace:** [capture from LangSmith after first proactive scan]
 
-**Goal:** Confirm the graph runs at all. Understand what a proactive scan produces.
+**What to verify in trace:** Fetch nodes run in parallel. Reasoning node
+produces rolled-up findings. Classify routes to action_propose. Findings
+persist as documents. Dedup prevents duplicates on next scan.
 
-**What to do:**
+### TC-2: On-Demand — Smart Next Action (UC6)
 
-1. Verify FleetGraph is running: `curl http://127.0.0.1:3100/api/fleetgraph/health`
-2. Wait for the 5-minute poller to fire (or restart FleetGraph to trigger immediately)
-3. Check LangSmith for a new trace in the `fleetgraph` project
-4. Open the trace — walk through each node:
-   - **Trigger** — mode=proactive
-   - **Fetch nodes** (parallel) — what data was pulled? How much?
-   - **Reasoning** — read the GPT-4o prompt and response. What findings did it produce?
-   - **Classify** — what classification? (clean/notify/action_propose)
-   - **Persist** (if notify/action_propose) — was a finding document created?
-5. Check the database for any new `fleetgraph_finding` documents
-6. **Check the findings inbox** — navigate to the findings page in Ship UI.
-   Do findings appear? Does the badge count match? Can you see severity and
-   affected entity?
+**How:** Open FleetGraph chat on any document. Ask "What should I work on next?"
+Must be logged in as a user with assigned issues (dev@ship.local or iris.nguyen).
 
-**What to look for:**
+**Ship state:** User has multiple assigned issues across priorities, some in
+progress, some blocked, one with a due date.
 
-- Does the trace show a complete execution path?
-- Is the reasoning output coherent? Does it identify real problems?
-- Are findings actually persisted to Ship's database?
-- Does the findings inbox (fg-1ml) work? Badge count, filter tabs, click-through?
+**Expected output:** Prioritized recommendation — finish in-progress work first,
+flag blocked issues, mention due dates. NOT a raw dump of all issues.
 
-**Known data in scope (active Week 14):**
+**Trace:** [capture from LangSmith]
 
-- 35 issues across multiple Week 14 sprints
-- 4 issues added post-sprint-start (scope creep signal)
-- 7 in_review issues (potential bottleneck)
-- Multiple dependency chains
+**What to verify in trace:** Context node resolves userId. Fetch-issues scopes
+to user's issues (not all 228). Reasoning prompt includes user's question.
+Response is conversational, not a data dump.
 
----
+### TC-3: On-Demand — Project/Sprint Analysis (UC1/UC5)
 
-### Test 2: UC2 — Stale Triage Backlog (simplest proactive detection)
+**How:** Navigate to a Week 14 sprint or the FleetGraph Demo program page.
+Open chat. Ask "How is this sprint going?" or "What's the risk here?"
 
-**Goal:** Verify FleetGraph detects stale triage issues. This is the simplest
-detection — just "issues stuck in triage too long."
+**Ship state:** Week 14 has scope creep (4 post-start issues), blocked issues,
+velocity drop from prior weeks.
 
-**Seeded data:**
+**Expected output:** Analysis scoped to the sprint/program — scope change
+quantified, blocked issues identified, velocity trend noted.
 
-| Issue | Age | Source | Program |
-|-------|-----|--------|---------|
-| Bug: login fails with special characters | 7 days | external | FleetGraph Demo |
-| Feature: add dark mode toggle | 6 days | internal | FleetGraph Demo |
-| Bug: export CSV drops unicode columns | 6 days | external | FleetGraph Demo |
-| Bug: notification badge count wrong | 6 days | external | FleetGraph Demo |
-| Bug: search results don't update | 5 days | external | FleetGraph Demo |
-| Feature: keyboard shortcut for quick issue create | 5 days | internal | FleetGraph Demo |
-| Bug: tooltip overlaps on mobile | 2 days (confounder — too fresh) | external | FleetGraph Demo |
+**Trace:** [capture from LangSmith]
 
-**Expected finding (ONE rollup):**
+**What to verify in trace:** Context node scopes to the document being viewed.
+Fetch is scoped (not full workspace). Different execution path from TC-1
+(on-demand vs proactive).
 
-"6 issues in triage for 3+ days in FleetGraph Demo. 4 external bugs, 2 internal
-requests." The 2-day-old tooltip bug should NOT be included (too fresh).
+### TC-4: On-Demand — Off-Topic Deflection (Regression)
 
-**What to check:**
+**How:** Open chat on any document. Ask "Do you like spaghetti?"
 
-- Does the proactive scan produce a stale_triage finding?
-- Is it a rollup (one finding, not six)?
-- Does it correctly exclude the 2-day-old issue?
-- Does the finding appear in the inbox?
+**Ship state:** Irrelevant — testing that the agent handles non-project queries.
 
-**Known risk:** fg-3kh notes that stale_triage findings dominate over other
-detection types. You may see stale_triage but miss scope_creep in the same run.
+**Expected output:** Empty findings or polite deflection. NOT 30 issues dumped.
 
----
+**Trace:** [capture — should show Clean path, minimal tokens]
 
-### Test 3: UC1 — Sprint Scope Creep (proactive, quantified)
+**What to verify in trace:** Classify returns clean. No findings produced.
+Fast execution (< 5s). Minimal token usage.
 
-**Goal:** Verify FleetGraph detects mid-sprint scope additions.
+### TC-5: HITL Gate — Acknowledge/Snooze Flow
 
-**Seeded data (Week 14 in FleetGraph Demo):**
+**How:** From findings inbox, click Acknowledge on a finding. Verify badge
+clears. Wait for next proactive scan — verify finding updates in place
+without re-badging (same severity).
 
-- ~17 issues created before sprint start (2026-03-10)
-- 4 issues created after sprint start:
-  - "Validate pool config schema" (2026-03-11)
-  - "Add pool error categorization" (2026-03-11)
-  - "Fix notification delivery reliability" (2026-03-11)
-  - "Add connection timeout configuration" (2026-03-14)
+If fg-39o is deployed: also test Snooze (tomorrow default). Verify finding
+disappears from active view.
 
-**Expected finding:**
+**Ship state:** Active findings from TC-1.
 
-"Sprint scope increased ~19% (4 issues added post-start out of ~21 total)."
-Should name the issues and when they were added. One rollup finding, not four.
+**Expected output:** Acknowledged findings stay alive but don't re-badge.
+Snoozed findings disappear until snooze expires.
 
-**What to check:**
-
-- Does the finding quantify scope change as a percentage?
-- Does it name which issues were added and when?
-- Is it linked to the sprint document via associations?
-
-**Known risk:** fg-3kh notes scope_creep is not reliably detected — stale_triage
-dominates the reasoning output. This test may produce stale_triage instead of
-scope_creep. If so, that's a fg-3kh problem (reasoning prompt weighting), not a
-graph problem.
+**Trace:** No LangSmith trace needed — this is a UI/API interaction, not a
+graph run. But the NEXT proactive scan's trace should show dedup skipping
+the acknowledged finding.
 
 ---
 
-### Test 4: UC6 — Smart Next Action (simplest on-demand)
+## Architecture Decisions Section
 
-**Goal:** Test on-demand chat with a scoped question. This validates the fg-3ah
-scoping fix and fg-3aw auth fix together.
+Write this in FLEETGRAPH.md. Content to include (you already have all of this
+from Tower discussions):
 
-**How to trigger:**
+### 1. Framework: LangGraph.js
+- TypeScript for unified monorepo types
+- Native LangSmith tracing without manual instrumentation
+- Conditional branching, parallel node execution, typed state
 
-1. Log in as Iris Nguyen (iris.nguyen@ship.local) — or navigate to one of her issues
-2. Open the FleetGraph chat panel on any document
-3. Ask: "What should I work on next?"
+### 2. Node Design
+- Parallel fetch nodes (issues, sprints, team) — not sequential
+- Error isolation: individual node failures don't crash the graph
+- Conditional edges from classify node: clean/notify/action_propose
 
-**Seeded data (Iris's open issues):**
+### 3. Dual Auth Model
+- Proactive mode: service account API token (Bearer auth)
+- On-demand mode: forwarded user session cookie
+- Why: on-demand must respect per-user document visibility (Ship applies
+  visibility filtering). Service account in on-demand path = data leakage
+  vector. In a federal tool, private documents may contain pre-decisional
+  material under deliberative process privilege.
 
-| Issue | State | Priority | Due | Blocked? |
-|-------|-------|----------|-----|----------|
-| Create error handling | in_progress | high | — | No |
-| Finalize user onboarding flow | in_progress | high | — | No |
-| Build notification preference API | todo | high | — | No |
-| Configure CI/CD pipeline | todo | high | — | No |
-| Security audit fixes | todo | high | — | No |
-| Fix notification delivery reliability | todo | medium | 2026-03-19 (TODAY) | No |
-| Implement notification rendering engine | todo | medium | — | Yes (blocked by "Define notification template schema") |
-| Add unit tests | todo | medium | — | No |
-| Performance optimization | todo | medium | — | No |
-| Add connection timeout configuration | in_review | medium | — | No |
-| Add export functionality | backlog | low | — | No |
-| Add notification sound preferences | todo | low | — | No |
+### 4. Findings as Documents
+- FleetGraph output stored in Ship's unified document model
+- No shadow databases — findings are visible, searchable, commentable
+- Dedup by (finding_type, affected_entity_id) — update in place, re-badge
+  only on severity escalation
 
-**Expected response:**
+### 5. Human Decision Model
+- Acknowledge / Snooze / Approve — no permanent dismiss
+- Why no dismiss: in a government PM tool, permanent suppression of findings
+  is an audit liability. The system keeps watching. If the condition worsens,
+  it escalates.
 
-1. "Finish what's in progress first — Create error handling and Finalize user
-   onboarding flow are both high priority and already started"
-2. "Fix notification delivery reliability is due TODAY"
-3. "Don't start Implement notification rendering engine — it's blocked"
-4. Should NOT just dump all 12 issues as findings
+### 6. Cadenced Scan Architecture (designed, not yet implemented)
+- The cadence analysis: hot (scope creep, blocked chains), daily (triage,
+  accountability), weekly (retro patterns)
+- Why uniform 5-min polling is wrong for most use cases
+- Cost and responsiveness comparison
+- This is documented as the production-ready design; MVP uses uniform polling
 
-**What to check:**
-
-- Does the response address Iris's actual workload? (fg-3ah: userId now populated)
-- Does it prioritize intelligently (not just sort by priority)?
-- Does it mention the due date and the blocker?
-- Is the response conversational or a raw data dump? (fg-3ah: prompt tightened)
-- Check LangSmith trace: did fetch-issues scope to Iris's issues, not all 228?
-- **Auth check (fg-3aw):** does the trace show session cookie auth, not Bearer token?
-
----
-
-### Test 5: UC3 — Accountability Debt Roll-up (proactive, multi-person)
-
-**Goal:** Verify FleetGraph detects accountability gaps across people.
-
-**Seeded data:**
-
-| Person | Standups (7d) | Total Plans | Total Retros | Signal |
-|--------|--------------|-------------|--------------|--------|
-| Grace Lee | 6 | 7 | 5 | Compliant (control — no finding) |
-| Iris Nguyen | 5 | 7 | 6 | Mostly compliant (control) |
-| Alice Chen | 2 | 4 | 3 | Low standup frequency |
-| Bob Martinez | 2 | 0 | 0 | Zero plans, zero retros |
-| David Kim | 2 | 2 | 3 | Low standups |
-| Frank Garcia | 0 | 3 | 1 | Missing standups + retros |
-| Emma Johnson | 0 | 6 | 4 | Missing standups |
-| Henry Patel | 0 | 4 | 3 | Missing standups |
-| Jack Brown | 0 | 4 | 3 | Missing standups |
-
-**Expected findings (one per person with a problem, NOT one per violation):**
-
-- Bob Martinez: "Zero plans and zero retros submitted — complete accountability gap"
-- Frank Garcia: "No standups, only 1 retro out of 3 plans — selective compliance"
-- Grace Lee, Iris Nguyen: NO finding (compliant)
-- Others: findings for missing standups proportional to severity
-
-**What to check:**
-
-- Are findings rolled up per person, not per missed item?
-- Are compliant people correctly excluded?
-- Does Bob's finding reflect a PATTERN, not just "missed standup on Tuesday"?
-- Does severity scale appropriately (Bob > Frank > Alice)?
-
-**Known risk:** fg-3kh notes accountability_debt detection needs standup/plan/retro
-submission data that may not be in the fetch pipeline yet. This test may partially
-fail — the question is whether enough data reaches the reasoning node.
+### 7. Deployment
+- Linode VPS via pm2, separate from Ship's AWS Elastic Beanstalk
+- Ship proxies FleetGraph requests, forwarding session auth
+- Why separate: FleetGraph has different scaling characteristics, doesn't
+  need EB's auto-scaling, and shouldn't be coupled to Ship's deploy cycle
 
 ---
 
-### Test 6: UC4 — Blocked Work Chain (on-demand, HITL)
+## Workflow
 
-**Goal:** Test the full action-propose → human-gate → execute path. This is
-the HITL demo. fg-584 wired this path — verify it actually works.
-
-**Seeded data (dependency chain):**
-
-```
-"Document pool configuration for ops" (todo)
-  └── depends on: "Add health check endpoint" (in_progress)
-      └── depends on: "Implement connection retry logic" (in_review)
-          └── depends on: "Migrate database connection pooling" (in_review)
-```
-
-All 4 issues are in FleetGraph Demo, Week 14. The chain is 4 links deep, bottom
-two are stuck in review.
-
-**How to trigger:**
-
-1. Navigate to "Document pool configuration for ops" or "Add health check endpoint"
-2. Open FleetGraph chat
-3. Ask: "What's blocking this?" or "Why is this stuck?"
-
-**Expected behavior:**
-
-1. Graph traces the full dependency chain
-2. Identifies the bottleneck (review queue depth)
-3. Proposes action: reassign review or escalate
-4. Finding created with `status: pending_decision`, `human_decision: null`
-5. Finding appears in inbox with Confirm/Dismiss buttons
-6. **Confirm:** executes the proposed action via Ship API (e.g., reassigns the issue)
-7. **Dismiss:** marks finding as dismissed, no action taken
-
-**What to check:**
-
-- Does the graph detect the full chain (not just the immediate blocker)?
-- Does it identify the root cause (bottom of chain in review)?
-- Does the proposed action make sense?
-- Does Confirm actually mutate Ship data? (fg-584 wired execute node)
-- Does Dismiss correctly skip execution?
-- LangSmith trace: does it show the action-propose → human-gate path?
-- **Dedup check (fg-3ki):** if you trigger this twice, does the second run create
-  a duplicate finding or respect the existing one? Note: fg-3ki says dedup doesn't
-  handle `pending_decision` status — may get duplicates on re-run.
-
-**Known risk:** fg-3kh notes blocked_chain detection needs issue dependency data
-(`properties.depends_on`) which the list endpoint doesn't return. The graph may
-need to fetch individual issues to get dependency data. If the chain isn't detected,
-that's the data gap, not a graph wiring issue.
-
----
-
-### Test 7: UC5 — Project Risk Assessment (on-demand, composite)
-
-**Goal:** Test composite analysis across multiple signals.
-
-**Candidate project: "Legacy Migration"**
-
-- No owner (owner_id is null)
-- No success criteria
-- 38 total issues: 17 done, 4 active, 17 pending
-- Likely declining velocity (check sprint-by-sprint completion)
-
-**How to trigger:**
-
-1. Navigate to the Legacy Migration project page
-2. Open FleetGraph chat
-3. Ask: "How is this project doing?" or "What's the risk here?"
-
-**Expected response:**
-
-- Missing ownership flagged
-- Missing success criteria flagged
-- Velocity analysis (if sprint data is linked)
-- Overall risk assessment: HIGH
-
-**What to check:**
-
-- Does the analysis cite multiple signals (not just one)?
-- Does it flag the missing owner and success criteria?
-- Is the assessment honest about risk vs. rubber-stamping "on track"?
-- **Scoping check:** does the response focus on Legacy Migration, or does it dump
-  data about all 21 projects? (fg-3ah should have fixed this)
-
----
-
-### Test 8: UC7 — Retro Pattern Mining (on-demand, cross-document)
-
-**Goal:** Test the most ambitious detection — mining across multiple retro docs.
-
-**Seeded data:**
-
-- 34 retro documents across weeks 11-14
-- At least 3 retros mention "deploy" issues (weeks 12 and 13)
-- Content is TipTap JSON (the reasoning node needs to extract text from it)
-
-**How to trigger:**
-
-1. Navigate to a program page (FleetGraph Demo)
-2. Open FleetGraph chat
-3. Ask: "Any patterns in our retros?" or "What keeps coming up in retrospectives?"
-
-**Expected behavior:**
-
-- Graph fetches retro documents across multiple sprints
-- Reasoning node reads TipTap JSON content and extracts themes
-- Identifies recurring "deploy" theme across sprints 12-13
-- Ideally links to unfulfilled action items
-
-**What to check:**
-
-- Does the graph actually fetch retro content? (fg-3kh flagged this as missing)
-- Can GPT-4o extract themes from TipTap JSON?
-- Does it find the cross-sprint pattern?
-- This is the **most likely to fail** — fg-3kh explicitly says retro content is
-  not fetched. If it fails, note WHAT failed: no data fetched? data fetched but
-  LLM missed it? wrong classification?
-
----
-
-## Regression Tests
-
-### Spaghetti Test
-
-Verify the on-demand scoping fix (fg-3ah) works:
-
-1. Open any document
-2. Open FleetGraph chat
-3. Ask: "Do you like spaghetti?"
-
-**Expected:** Empty findings array or a polite deflection. NOT 30 issues dumped.
-
-### Auth Isolation Test
-
-Verify the auth fix (fg-3aw) works:
-
-1. Log in as a non-admin user
-2. Open FleetGraph chat on a document
-3. Ask any project question
-4. Check LangSmith trace: verify the fetch nodes used session cookie, not Bearer token
-5. Confirm the response only references data that user can see
-
----
-
-## After Testing
-
-For each test, record:
-
-- **Result:** Pass / Partial / Fail
-- **What surprised you:** anything unexpected, good or bad
-- **Gap identified:** what's missing or broken (becomes a bead)
-- **LangSmith trace URL:** for reference
-
-Update fg-215 with observations. Create beads for gaps discovered.
+1. **Deploy** (if needed) — ensure latest code is running
+2. **Wait for proactive scan** — capture TC-1 trace
+3. **Run on-demand tests** — TC-2, TC-3, TC-4 via Ship UI chat
+4. **Test HITL flow** — TC-5 via findings inbox
+5. **Make all traces public** in LangSmith (share link)
+6. **Update FLEETGRAPH.md Test Cases** — replace stale TC-1 through TC-5 with
+   fresh results and trace links
+7. **Write Architecture Decisions** — new section in FLEETGRAPH.md
+8. **Commit and push** — before 11:59 PM
