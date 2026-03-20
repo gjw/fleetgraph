@@ -5,7 +5,7 @@ import { useFindingsQuery, type FindingDocument } from '@/hooks/useFindingsQuery
 import { useFleetGraphDecide } from '@/hooks/useFleetGraph';
 import { useInvalidateFindings } from '@/hooks/useFindingsQuery';
 
-type FilterTab = 'all' | 'active' | 'confirmed' | 'dismissed';
+type FilterTab = 'all' | 'active' | 'acknowledged' | 'snoozed';
 
 const severityStyles = {
   info: 'border-blue-500/30 bg-blue-500/5',
@@ -52,16 +52,75 @@ function formatTimeAgo(dateStr: string): string {
   return date.toLocaleDateString();
 }
 
+function getTomorrowAt8AM(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  d.setHours(8, 0, 0, 0);
+  return d.toISOString();
+}
+
+function getNextMondayAt8AM(): string {
+  const d = new Date();
+  const day = d.getDay();
+  const daysUntilMonday = day === 0 ? 1 : 8 - day;
+  d.setDate(d.getDate() + daysUntilMonday);
+  d.setHours(8, 0, 0, 0);
+  return d.toISOString();
+}
+
+function SplitSnoozeButton({
+  disabled,
+  onSnooze,
+}: {
+  disabled: boolean;
+  onSnooze: (snoozeUntil: string) => void;
+}) {
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  return (
+    <div className="relative inline-flex">
+      <button
+        onClick={() => onSnooze(getTomorrowAt8AM())}
+        disabled={disabled}
+        className="rounded-l bg-yellow-600/20 px-3 py-1.5 text-xs font-medium text-yellow-400 hover:bg-yellow-600/30 disabled:opacity-50 transition-colors"
+      >
+        Snooze
+      </button>
+      <button
+        onClick={() => setShowDropdown(!showDropdown)}
+        disabled={disabled}
+        className="rounded-r border-l border-yellow-600/30 bg-yellow-600/20 px-1.5 py-1.5 text-xs font-medium text-yellow-400 hover:bg-yellow-600/30 disabled:opacity-50 transition-colors"
+      >
+        ▾
+      </button>
+      {showDropdown && (
+        <div className="absolute top-full left-0 mt-1 z-10 rounded border border-border bg-surface shadow-lg">
+          <button
+            onClick={() => {
+              onSnooze(getNextMondayAt8AM());
+              setShowDropdown(false);
+            }}
+            className="whitespace-nowrap px-3 py-1.5 text-xs text-foreground hover:bg-border/50 transition-colors"
+          >
+            Until next week
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FindingCard({ finding }: { finding: FindingDocument }) {
   const decideMutation = useFleetGraphDecide();
   const invalidateFindings = useInvalidateFindings();
   const props = finding.properties;
   const severity = props?.severity || 'info';
   const isUndecided = props?.human_decision === null && (props?.status === 'active' || props?.status === 'pending_decision');
+  const hasActionableProposal = props?.proposed_action && props.proposed_action.type !== 'add_comment';
 
-  const handleDecide = (decision: 'confirm' | 'dismiss') => {
+  const handleDecide = (decision: 'acknowledge' | 'snooze' | 'approve', snoozeUntil?: string) => {
     decideMutation.mutate(
-      { findingId: finding.id, decision },
+      { findingId: finding.id, decision, snooze_until: snoozeUntil },
       { onSuccess: () => invalidateFindings() },
     );
   };
@@ -105,40 +164,48 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
       )}
 
       {/* Proposed action */}
-      {props?.proposed_action && props.proposed_action.type !== 'add_comment' && (
+      {hasActionableProposal && (
         <p className="text-xs text-muted italic">
-          {actionLabels[props.proposed_action.type] ?? `Proposed: ${props.proposed_action.type}`}
+          {actionLabels[props.proposed_action!.type] ?? `Proposed: ${props.proposed_action!.type}`}
         </p>
       )}
 
-      {/* Actions or status */}
+      {/* Actions */}
       {isUndecided && (
-        <div className="flex gap-2 pt-1">
+        <div className="flex items-center gap-2 pt-1">
           <button
-            onClick={() => handleDecide('confirm')}
-            disabled={decideMutation.isPending}
-            className="rounded bg-green-600/20 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-600/30 disabled:opacity-50 transition-colors"
-          >
-            Confirm
-          </button>
-          <button
-            onClick={() => handleDecide('dismiss')}
+            onClick={() => handleDecide('acknowledge')}
             disabled={decideMutation.isPending}
             className="rounded bg-border px-3 py-1.5 text-xs font-medium text-muted hover:bg-border/80 disabled:opacity-50 transition-colors"
           >
-            Dismiss
+            Acknowledge
           </button>
+          <SplitSnoozeButton
+            disabled={decideMutation.isPending}
+            onSnooze={(until) => handleDecide('snooze', until)}
+          />
+          {hasActionableProposal && (
+            <button
+              onClick={() => handleDecide('approve')}
+              disabled={decideMutation.isPending}
+              className="rounded bg-green-600/20 px-3 py-1.5 text-xs font-medium text-green-400 hover:bg-green-600/30 disabled:opacity-50 transition-colors"
+            >
+              Approve
+            </button>
+          )}
         </div>
       )}
 
+      {/* Status badge for decided findings */}
       {props?.human_decision && (
         <span className={cn(
           'inline-flex rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
           props.human_decision === 'confirmed' ? 'bg-green-600/20 text-green-400' :
-          props.human_decision === 'dismissed' ? 'bg-border text-muted' :
-          'bg-yellow-600/20 text-yellow-400',
+          props.human_decision === 'acknowledged' ? 'bg-border text-muted' :
+          props.human_decision === 'snoozed' ? 'bg-yellow-600/20 text-yellow-400' :
+          'bg-border text-muted',
         )}>
-          {props.human_decision}
+          {props.human_decision === 'confirmed' ? 'approved' : props.human_decision}
         </span>
       )}
 
@@ -171,8 +238,8 @@ export function FindingsPage() {
     const props = f.properties;
     switch (activeTab) {
       case 'active': return props?.human_decision === null && (props?.status === 'active' || props?.status === 'pending_decision');
-      case 'confirmed': return props?.human_decision === 'confirmed';
-      case 'dismissed': return props?.human_decision === 'dismissed';
+      case 'acknowledged': return props?.human_decision === 'acknowledged';
+      case 'snoozed': return props?.human_decision === 'snoozed';
       default: return true;
     }
   });
@@ -180,15 +247,15 @@ export function FindingsPage() {
   const counts = {
     all: findings?.length || 0,
     active: findings?.filter(f => f.properties?.human_decision === null && (f.properties?.status === 'active' || f.properties?.status === 'pending_decision')).length || 0,
-    confirmed: findings?.filter(f => f.properties?.human_decision === 'confirmed').length || 0,
-    dismissed: findings?.filter(f => f.properties?.human_decision === 'dismissed').length || 0,
+    acknowledged: findings?.filter(f => f.properties?.human_decision === 'acknowledged').length || 0,
+    snoozed: findings?.filter(f => f.properties?.human_decision === 'snoozed').length || 0,
   };
 
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'active', label: 'Active' },
-    { key: 'confirmed', label: 'Confirmed' },
-    { key: 'dismissed', label: 'Dismissed' },
+    { key: 'acknowledged', label: 'Acknowledged' },
+    { key: 'snoozed', label: 'Snoozed' },
   ];
 
   return (

@@ -5,7 +5,8 @@ import { executeMutation } from '../../graph/nodes/execute.js';
 import type { ProposedAction } from '../../graph/state.js';
 
 interface DecideRequest {
-  decision: 'confirm' | 'dismiss';
+  decision: 'acknowledge' | 'snooze' | 'approve';
+  snooze_until?: string;
 }
 
 /**
@@ -18,8 +19,14 @@ export function createFindingsRouter(): RouterType {
     const id = req.params.id as string;
     const body = req.body as DecideRequest;
 
-    if (!body.decision || !['confirm', 'dismiss'].includes(body.decision)) {
-      res.status(400).json({ error: 'decision must be "confirm" or "dismiss"' });
+    const validDecisions = ['acknowledge', 'snooze', 'approve'];
+    if (!body.decision || !validDecisions.includes(body.decision)) {
+      res.status(400).json({ error: 'decision must be "acknowledge", "snooze", or "approve"' });
+      return;
+    }
+
+    if (body.decision === 'snooze' && !body.snooze_until) {
+      res.status(400).json({ error: 'snooze_until is required for snooze decisions' });
       return;
     }
 
@@ -39,17 +46,10 @@ export function createFindingsRouter(): RouterType {
     const doc = docResult.data;
     const props = (doc.properties ?? {}) as Record<string, unknown>;
 
-    if (props.human_decision !== null) {
-      res.status(409).json({
-        error: 'Decision already made',
-        current_decision: props.human_decision,
-      });
-      return;
-    }
-
-    if (body.decision === 'dismiss') {
+    // Acknowledge: "I've seen this" — finding stays alive, clears badge
+    if (body.decision === 'acknowledge') {
       const updateResult = await client.updateDocument(id, {
-        properties: { ...props, human_decision: 'dismissed', status: 'dismissed' },
+        properties: { ...props, human_decision: 'acknowledged', status: 'acknowledged' },
       });
 
       if (updateResult.error) {
@@ -57,22 +57,44 @@ export function createFindingsRouter(): RouterType {
         return;
       }
 
-      console.log(`[findings] dismissed finding ${id}`);
-      res.json({ status: 'dismissed', findingId: id });
+      console.log(`[findings] acknowledged finding ${id}`);
+      res.json({ status: 'acknowledged', findingId: id });
       return;
     }
 
-    // Confirm path: execute the proposed action, then mark as resolved
-    const proposedAction = props.proposed_action as ProposedAction | null;
+    // Snooze: defer until a specific time
+    if (body.decision === 'snooze') {
+      const updateResult = await client.updateDocument(id, {
+        properties: {
+          ...props,
+          human_decision: 'snoozed',
+          status: 'snoozed',
+          snooze_until: body.snooze_until,
+        },
+      });
 
-    let executionResult: Record<string, unknown> = { skipped: true, reason: 'No proposed action' };
+      if (updateResult.error) {
+        res.status(500).json({ error: 'Failed to update finding', details: updateResult.error.message });
+        return;
+      }
 
-    if (proposedAction && proposedAction.type && proposedAction.params) {
-      console.log(`[findings] executing action: ${proposedAction.type} for finding ${id}`);
-      executionResult = await executeMutation(client, proposedAction);
+      console.log(`[findings] snoozed finding ${id} until ${body.snooze_until}`);
+      res.json({ status: 'snoozed', findingId: id, snooze_until: body.snooze_until });
+      return;
     }
 
-    const confirmResult = await client.updateDocument(id, {
+    // Approve: execute the proposed action, then mark as resolved
+    const proposedAction = props.proposed_action as ProposedAction | null;
+
+    if (!proposedAction || !proposedAction.type || !proposedAction.params) {
+      res.status(400).json({ error: 'Finding has no proposed action to approve' });
+      return;
+    }
+
+    console.log(`[findings] executing action: ${proposedAction.type} for finding ${id}`);
+    const executionResult = await executeMutation(client, proposedAction);
+
+    const approveResult = await client.updateDocument(id, {
       properties: {
         ...props,
         human_decision: 'confirmed',
@@ -81,14 +103,14 @@ export function createFindingsRouter(): RouterType {
       },
     });
 
-    if (confirmResult.error) {
-      res.status(500).json({ error: 'Failed to update finding', details: confirmResult.error.message });
+    if (approveResult.error) {
+      res.status(500).json({ error: 'Failed to update finding', details: approveResult.error.message });
       return;
     }
 
-    console.log(`[findings] confirmed finding ${id} — action executed`);
+    console.log(`[findings] approved finding ${id} — action executed`);
     res.json({
-      status: 'confirmed',
+      status: 'approved',
       findingId: id,
       executionResult,
     });

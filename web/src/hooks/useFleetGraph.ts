@@ -27,7 +27,8 @@ interface ChatResponse {
 
 interface DecideRequest {
   findingId: string;
-  decision: 'confirm' | 'dismiss';
+  decision: 'acknowledge' | 'snooze' | 'approve';
+  snooze_until?: string;
 }
 
 interface DecideResponse {
@@ -54,8 +55,8 @@ export function useFleetGraphChat() {
 export function useFleetGraphDecide() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ findingId, decision }: DecideRequest): Promise<DecideResponse> => {
-      const res = await apiPost(`/api/fleetgraph/findings/${findingId}/decide`, { decision });
+    mutationFn: async ({ findingId, decision, snooze_until }: DecideRequest): Promise<DecideResponse> => {
+      const res = await apiPost(`/api/fleetgraph/findings/${findingId}/decide`, { decision, snooze_until });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error || 'Decision failed');

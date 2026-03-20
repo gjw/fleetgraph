@@ -50,21 +50,26 @@ export async function loadExistingFindings(
 }
 
 /**
- * Status-agnostic dedup: if ANY existing finding matches, skip —
- * unless it's resolved (condition returned) or snooze expired.
+ * Dedup logic: determines whether to create a new finding or skip (update in place).
+ *
+ * - acknowledged → 'skip' (update in place; re-badge only on severity escalation)
+ * - snoozed + expired → 'create' (snooze window passed, treat as new)
+ * - snoozed + not expired → 'skip'
+ * - resolved (from approve) → 'create' (condition returned after fix)
+ * - active/pending_decision → 'skip' (already visible)
  */
 export function shouldCreateFinding(existing: ShipDocument): 'skip' | 'create' {
   const props = existing.properties as FindingProps;
 
-  // Resolved findings can be re-created (condition returned)
+  // Resolved findings can be re-created (condition returned after approved fix)
   if (props.status === 'resolved') return 'create';
 
-  // Expired snooze — re-create
+  // Expired snooze — re-create (treat as new)
   if (props.human_decision === 'snoozed' && props.snooze_until) {
     if (new Date(props.snooze_until) < new Date()) return 'create';
   }
 
-  // Everything else: active, pending_decision, dismissed, confirmed, snoozed — skip
+  // Everything else: acknowledged, active, pending_decision, snoozed (not expired) — skip
   return 'skip';
 }
 
@@ -136,6 +141,12 @@ export async function updateExistingFinding(
   if (severityUpgrade) {
     propsUpdate.severity = finding.severity;
     propsChanged = true;
+    // Re-badge acknowledged findings on severity escalation
+    if (props.human_decision === 'acknowledged') {
+      propsUpdate.human_decision = null;
+      propsUpdate.status = 'active';
+      console.log(`${logPrefix} severity escalated on acknowledged finding — re-badging`);
+    }
   }
   if (enrichment?.affected_entity_name) {
     propsUpdate.affected_entity_name = enrichment.affected_entity_name;

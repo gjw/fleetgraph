@@ -8,7 +8,7 @@ export interface FindingDocument {
   properties: {
     finding_type: string;
     severity: 'info' | 'warning' | 'critical';
-    status: 'active' | 'dismissed' | 'snoozed' | 'resolved' | 'pending_decision';
+    status: 'active' | 'acknowledged' | 'snoozed' | 'resolved' | 'pending_decision';
     affected_entity_id: string;
     affected_entity_type: string;
     affected_entity_name?: string;
@@ -17,7 +17,7 @@ export interface FindingDocument {
       type: string;
       params: Record<string, unknown>;
     } | null;
-    human_decision: 'confirmed' | 'dismissed' | 'snoozed' | null;
+    human_decision: 'confirmed' | 'acknowledged' | 'snoozed' | null;
     snooze_until: string | null;
     reasoning_model: string;
     token_usage: { input: number; output: number };

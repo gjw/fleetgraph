@@ -47,25 +47,27 @@ function FindingCard({ finding, docId }: FindingCardProps) {
       {docId && !decided && (
         <div className="flex gap-2 pt-1">
           <button
-            onClick={() => decideMutation.mutate({ findingId: docId, decision: 'confirm' })}
-            disabled={decideMutation.isPending}
-            className="rounded bg-green-600/20 px-2.5 py-1 text-xs font-medium text-green-400 hover:bg-green-600/30 disabled:opacity-50 transition-colors"
-          >
-            Confirm
-          </button>
-          <button
-            onClick={() => decideMutation.mutate({ findingId: docId, decision: 'dismiss' })}
+            onClick={() => decideMutation.mutate({ findingId: docId, decision: 'acknowledge' })}
             disabled={decideMutation.isPending}
             className="rounded bg-border px-2.5 py-1 text-xs font-medium text-muted hover:bg-border/80 disabled:opacity-50 transition-colors"
           >
-            Dismiss
+            Acknowledge
           </button>
+          {finding.proposed_action && finding.proposed_action.type !== 'add_comment' && (
+            <button
+              onClick={() => decideMutation.mutate({ findingId: docId, decision: 'approve' })}
+              disabled={decideMutation.isPending}
+              className="rounded bg-green-600/20 px-2.5 py-1 text-xs font-medium text-green-400 hover:bg-green-600/30 disabled:opacity-50 transition-colors"
+            >
+              Approve
+            </button>
+          )}
         </div>
       )}
 
       {decided && (
         <p className="text-[11px] font-medium text-muted">
-          {decideMutation.data?.status === 'confirmed' ? 'Confirmed' : 'Dismissed'}
+          {decideMutation.data?.status === 'approved' ? 'Approved' : 'Acknowledged'}
         </p>
       )}
 
