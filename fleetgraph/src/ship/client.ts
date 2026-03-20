@@ -22,6 +22,7 @@ import type {
   ShipMyWork,
   ShipAccountabilityItems,
   ShipStandupStatus,
+  ShipReverseAssociation,
 } from './types.js';
 
 type AuthMode =
@@ -204,6 +205,11 @@ export class ShipClient {
 
   getDocumentAssociations(id: string): Promise<Result<ShipDocumentAssociations>> {
     return this.get(`/api/documents/${id}/associations`);
+  }
+
+  getReverseAssociations(id: string, type?: string): Promise<Result<ShipReverseAssociation[]>> {
+    const qs = type ? this.queryString({ type }) : '';
+    return this.get(`/api/documents/${id}/reverse-associations${qs}`);
   }
 
   createDocument(body: ShipCreateDocument): Promise<Result<ShipDocument>> {

@@ -367,6 +367,19 @@ export interface ShipStandupStatus {
   [key: string]: unknown;
 }
 
+// ── Reverse Associations ─────────────────────────────────────────────────────
+
+export interface ShipReverseAssociation {
+  id: string;
+  document_id: string;
+  related_id: string;
+  relationship_type: string;
+  created_at: string;
+  metadata: Record<string, unknown>;
+  document_title: string;
+  document_document_type: string;
+}
+
 // ── Query params ─────────────────────────────────────────────────────────────
 
 export interface ShipIssueParams {

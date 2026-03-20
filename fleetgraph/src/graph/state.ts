@@ -105,6 +105,10 @@ export const GraphState = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => null,
   }),
+  retroContent: Annotation<Array<{ sprintId: string; sprintName: string; text: string }>>({
+    reducer: (_prev, next) => next,
+    default: () => [],
+  }),
 
   // Fetch errors
   fetchErrors: Annotation<Record<string, string>>({

@@ -51,6 +51,7 @@ Your job: examine the provided workspace data and produce findings. Each finding
 - **missing_estimate** — Issues in active sprints without hour estimates. Look at sprintIssues estimate field.
 - **sprint_velocity_drop** — Sprint completion rate significantly below historical average. Compare completed vs total.
 - **unplanned_work** — High ratio of issues added mid-sprint vs original scope. Look at scopeChanges.
+- **retro_patterns** — Recurring themes across multiple retrospectives. Look at retroContent for repeated blockers, unresolved action items, or systemic problems mentioned in 2+ retros. Only produce this finding when retro content is provided and a clear pattern spans multiple sprints.
 
 ## Rollup Rule (CRITICAL — read carefully)
 
@@ -218,6 +219,14 @@ function buildUserPrompt(state: GraphStateType): string {
     );
   }
 
+  if (state.retroContent.length > 0) {
+    sections.push(
+      `## Retrospective Content (${state.retroContent.length} retros)\nLook for recurring themes, repeated blockers, or unresolved issues across these retrospectives.\n${state.retroContent
+        .map(r => `### ${r.sprintName}\n${r.text}`)
+        .join('\n\n')}`,
+    );
+  }
+
   if (Object.keys(state.fetchErrors).length > 0) {
     sections.push(
       `## Fetch Errors (some data may be missing)\n${JSON.stringify(state.fetchErrors, null, 2)}`,
@@ -258,7 +267,8 @@ function hasData(state: GraphStateType): boolean {
     state.projects.length > 0 ||
     state.programs.length > 0 ||
     state.team !== null ||
-    state.accountabilityItems !== null
+    state.accountabilityItems !== null ||
+    state.retroContent.length > 0
   );
 }
 
