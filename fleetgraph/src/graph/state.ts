@@ -18,6 +18,7 @@ export interface Finding {
   affectedEntityId: string;
   affectedEntityType: 'issue' | 'sprint' | 'project' | 'program' | 'person';
   title: string;
+  summary: string;
   reasoning: string;
   recommendedAction: string | null;
   recipientIds: string[];

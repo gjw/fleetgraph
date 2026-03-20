@@ -17,6 +17,11 @@ const FindingSchema = z.object({
         .describe('UUID of the affected entity. For person findings, use personId from the team grid (the person document UUID), NOT assignee_id or user UUIDs from issues.'),
       affectedEntityType: z.enum(['issue', 'sprint', 'project', 'program', 'person']),
       title: z.string().describe('Short human-readable title, under 80 chars'),
+      summary: z
+        .string()
+        .describe(
+          'One to two sentence detail line beneath the title. Provides the "so what" — cite specific numbers, names, and timeframes. E.g., "29 active issues across 2 programs. 79h estimated in FleetGraph Demo Week 14."',
+        ),
       reasoning: z
         .string()
         .describe(
@@ -40,6 +45,17 @@ const FindingSchema = z.object({
 const SYSTEM_PROMPT = `You are FleetGraph, a project intelligence analyst for a government project management system called Ship. You analyze project data to detect problems, risks, and opportunities that humans might miss.
 
 Your job: examine the provided workspace data and produce findings. Each finding identifies a specific, actionable condition.
+
+## Output Fields
+
+Each finding has three text fields:
+- **title**: headline (under 80 chars). E.g., "David Kim is overloaded"
+- **summary**: 1-2 sentence supporting detail with specific numbers. E.g., "29 active issues across 2 programs. 79h estimated in FleetGraph Demo Week 14."
+- **reasoning**: full narrative (2-4 sentences) explaining what was found, why it matters, and what is recommended.
+
+## Terminology
+
+In finding titles and summaries, refer to sprints as **weeks** (e.g., "Week 14", not "Sprint 14" or "Sprint Week 14"). This matches the Ship UI terminology. The underlying data uses "sprint" as the document type, but users see "Week N".
 
 ## Finding Types You Detect (in priority order)
 

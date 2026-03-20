@@ -25,6 +25,37 @@ function entityTypeToBelongsTo(
   }
 }
 
+/**
+ * Resolve the human-readable name of the affected entity from
+ * already-fetched state data. No extra API calls needed.
+ */
+function resolveEntityName(finding: Finding, state: GraphStateType): string {
+  const id = finding.affectedEntityId;
+  switch (finding.affectedEntityType) {
+    case 'issue': {
+      const issue = state.issues.find((i) => i.id === id);
+      return issue?.title ?? id;
+    }
+    case 'sprint': {
+      const sprint = state.sprints.find((s) => s.id === id);
+      return sprint?.name ?? id;
+    }
+    case 'project': {
+      const project = state.projects.find((p) => p.id === id);
+      return project?.title ?? id;
+    }
+    case 'program': {
+      const program = state.programs.find((p) => p.id === id);
+      return program?.name ?? id;
+    }
+    case 'person': {
+      const people = state.team?.users ?? state.team?.people ?? [];
+      const person = people.find((p) => p.personId === id || p.id === id);
+      return person?.name ?? id;
+    }
+  }
+}
+
 function buildTipTapContent(reasoning: string): Record<string, unknown> {
   return {
     type: 'doc',
@@ -65,6 +96,9 @@ async function resolveAssociation(
 export async function persistNode(
   state: GraphStateType,
 ): Promise<Partial<GraphUpdateType>> {
+  // Suppress add_comment fallback — it's meaningless to the user
+  const proposedAction =
+    state.proposedAction?.type === 'add_comment' ? null : (state.proposedAction ?? null);
   if (state.findings.length === 0) {
     console.log('[persist] no findings to persist');
     return { findingDocIds: [] };
@@ -96,7 +130,10 @@ export async function persistNode(
         console.log(
           `[persist] dedup hit: ${dedupKey} — updating in place`,
         );
-        await updateExistingFinding(client, existing, finding, '[persist]');
+        await updateExistingFinding(client, existing, finding, '[persist]', {
+          affected_entity_name: resolveEntityName(finding, state),
+          summary: finding.summary,
+        });
         skippedCount++;
         findingDocIds.push(existing.id);
         continue;
@@ -109,7 +146,9 @@ export async function persistNode(
       status: 'active',
       affected_entity_id: finding.affectedEntityId,
       affected_entity_type: finding.affectedEntityType,
-      proposed_action: state.proposedAction ?? null,
+      affected_entity_name: resolveEntityName(finding, state),
+      summary: finding.summary,
+      proposed_action: proposedAction,
       human_decision: state.humanDecision ?? null,
       recipient_ids: finding.recipientIds,
       reasoning_model: 'gpt-4o',

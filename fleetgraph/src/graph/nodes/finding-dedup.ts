@@ -5,6 +5,8 @@ import type { ShipDocument, ShipTeamGrid } from '../../ship/types.js';
 export interface FindingProps {
   finding_type?: string;
   affected_entity_id?: string;
+  affected_entity_name?: string;
+  summary?: string;
   severity?: 'info' | 'warning' | 'critical';
   status?: string;
   human_decision?: string | null;
@@ -110,6 +112,7 @@ export async function updateExistingFinding(
   existing: ShipDocument,
   finding: Finding,
   logPrefix: string,
+  enrichment?: { affected_entity_name?: string; summary?: string },
 ): Promise<boolean> {
   const props = existing.properties as FindingProps;
   const existingSeverity = props.severity ?? 'info';
@@ -117,18 +120,33 @@ export async function updateExistingFinding(
   const titleChanged = existing.title !== finding.title;
   const severityUpgrade =
     (SEVERITY_RANK[finding.severity] ?? 0) > (SEVERITY_RANK[existingSeverity] ?? 0);
+  const hasEnrichment = enrichment?.affected_entity_name || enrichment?.summary;
 
-  // Always update content (reasoning may have changed), but skip API call
-  // if title and severity are also unchanged
-  if (!titleChanged && !severityUpgrade) {
+  // Skip API call if nothing changed
+  if (!titleChanged && !severityUpgrade && !hasEnrichment) {
     console.log(`${logPrefix} existing finding ${existing.id} unchanged — skip update`);
     return false;
   }
 
   const patch: Record<string, unknown> = {};
   if (titleChanged) patch.title = finding.title;
+
+  const propsUpdate: Record<string, unknown> = { ...existing.properties };
+  let propsChanged = false;
   if (severityUpgrade) {
-    patch.properties = { ...existing.properties, severity: finding.severity };
+    propsUpdate.severity = finding.severity;
+    propsChanged = true;
+  }
+  if (enrichment?.affected_entity_name) {
+    propsUpdate.affected_entity_name = enrichment.affected_entity_name;
+    propsChanged = true;
+  }
+  if (enrichment?.summary) {
+    propsUpdate.summary = enrichment.summary;
+    propsChanged = true;
+  }
+  if (propsChanged) {
+    patch.properties = propsUpdate;
   }
 
   const result = await client.updateDocument(existing.id, patch);
