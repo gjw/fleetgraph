@@ -38,6 +38,7 @@ const MyWeekPage = lazy(() => import('@/pages/MyWeekPage').then(m => ({ default:
 const TeamModePage = lazy(() => import('@/pages/TeamMode').then(m => ({ default: m.TeamModePage })));
 const TeamDirectoryPage = lazy(() => import('@/pages/TeamDirectory').then(m => ({ default: m.TeamDirectoryPage })));
 const PersonEditorPage = lazy(() => import('@/pages/PersonEditor').then(m => ({ default: m.PersonEditorPage })));
+const PersonIssuesPage = lazy(() => import('@/pages/PersonIssuesPage').then(m => ({ default: m.PersonIssuesPage })));
 const FeedbackEditorPage = lazy(() => import('@/pages/FeedbackEditor').then(m => ({ default: m.FeedbackEditorPage })));
 const StatusOverviewPage = lazy(() => import('@/pages/StatusOverviewPage').then(m => ({ default: m.StatusOverviewPage })));
 const ReviewsPage = lazy(() => import('@/pages/ReviewsPage').then(m => ({ default: m.ReviewsPage })));
@@ -249,6 +250,7 @@ function AppRoutes() {
         <Route path="team/reviews" element={<ReviewsPage />} />
         <Route path="team/org-chart" element={<OrgChartPage />} />
         {/* Person profile stays in Teams context - no redirect to /documents */}
+        <Route path="team/:id/issues" element={<PersonIssuesPage />} />
         <Route path="team/:id" element={<PersonEditorPage />} />
         <Route path="feedback/:id" element={<FeedbackEditorPage />} />
         <Route path="findings" element={<FindingsPage />} />

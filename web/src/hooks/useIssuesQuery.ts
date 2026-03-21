@@ -95,6 +95,7 @@ export interface IssueFilters {
   programId?: string;
   projectId?: string;
   sprintId?: string;
+  assigneeId?: string;
 }
 
 // Query keys
@@ -124,6 +125,7 @@ async function fetchIssues(filters?: IssueFilters): Promise<Issue[]> {
   const params = new URLSearchParams();
   if (filters?.programId) params.append('program_id', filters.programId);
   if (filters?.sprintId) params.append('sprint_id', filters.sprintId);
+  if (filters?.assigneeId) params.append('assignee_id', filters.assigneeId);
   // Note: projectId filtering is done client-side via belongs_to array
 
   const queryString = params.toString();

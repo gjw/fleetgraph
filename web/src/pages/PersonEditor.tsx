@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { Editor } from '@/components/Editor';
 import { useAuth } from '@/hooks/useAuth';
 import { useDocuments } from '@/contexts/DocumentsContext';
@@ -239,6 +239,17 @@ function PersonSidebar({ person, people, isAdmin, onUpdateProperties, metricsVis
           </div>
         )}
       </PropertyRow>
+
+      {personUserId && (
+        <div className="border-t border-border pt-4">
+          <Link
+            to={`/team/${person.id}/issues`}
+            className="text-sm text-accent hover:underline"
+          >
+            View assigned issues &rarr;
+          </Link>
+        </div>
+      )}
 
       {metricsVisible && sprintMetrics && (
         <SprintHistory metrics={sprintMetrics} />

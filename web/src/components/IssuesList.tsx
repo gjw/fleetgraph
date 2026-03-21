@@ -135,6 +135,8 @@ export interface IssuesListProps {
   lockedProjectId?: string;
   /** Locked sprint filter - cannot be changed by user, triggers self-fetch */
   lockedSprintId?: string;
+  /** Locked assignee filter - cannot be changed by user, triggers self-fetch */
+  lockedAssigneeId?: string;
   /** Context to inherit when creating new issues (derived from locked filters if not provided) */
   inheritedContext?: {
     programId?: string;
@@ -208,6 +210,7 @@ export function IssuesList({
   lockedProgramId,
   lockedProjectId,
   lockedSprintId,
+  lockedAssigneeId,
   inheritedContext,
   showCreateButton = true,
   createButtonLabel = 'New Issue',
@@ -244,7 +247,7 @@ export function IssuesList({
   }, [sprintsData]);
 
   // Determine if we should self-fetch based on locked filters
-  const shouldSelfFetch = Boolean(lockedProgramId || lockedProjectId || lockedSprintId);
+  const shouldSelfFetch = Boolean(lockedProgramId || lockedProjectId || lockedSprintId || lockedAssigneeId);
 
   // State for "Show All Issues" toggle
   const [showAllIssues, setShowAllIssues] = useState(false);
@@ -255,6 +258,7 @@ export function IssuesList({
       programId: lockedProgramId,
       projectId: lockedProjectId,
       sprintId: lockedSprintId,
+      assigneeId: lockedAssigneeId,
     } : {},
     { enabled: shouldSelfFetch }
   );

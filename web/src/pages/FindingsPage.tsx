@@ -30,12 +30,13 @@ const entityTypeRoute: Record<string, string> = {
   sprint: '/documents/',
   project: '/documents/',
   program: '/documents/',
-  person: '/team/',
+  person: '/team/',  // getEntityLink appends /issues for person type
 };
 
 function getEntityLink(entityType: string, entityId: string): string {
   const prefix = entityTypeRoute[entityType] || '/documents/';
-  return `${prefix}${entityId}`;
+  const suffix = entityType === 'person' ? '/issues' : '';
+  return `${prefix}${entityId}${suffix}`;
 }
 
 function formatTimeAgo(dateStr: string): string {
