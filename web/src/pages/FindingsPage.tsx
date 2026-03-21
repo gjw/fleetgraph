@@ -25,18 +25,23 @@ const actionLabels: Record<string, string> = {
   escalate: 'Proposed: Escalate',
 };
 
-const entityTypeRoute: Record<string, string> = {
-  issue: '/documents/',
-  sprint: '/documents/',
-  project: '/documents/',
-  program: '/documents/',
-  person: '/team/',  // getEntityLink appends /issues for person type
-};
+function getEntityLink(entityType: string, entityId: string, findingType?: string): string {
+  if (entityType === 'person') {
+    return `/team/${entityId}/issues`;
+  }
 
-function getEntityLink(entityType: string, entityId: string): string {
-  const prefix = entityTypeRoute[entityType] || '/documents/';
-  const suffix = entityType === 'person' ? '/issues' : '';
-  return `${prefix}${entityId}${suffix}`;
+  if (entityType === 'sprint') {
+    if (findingType === 'retro_patterns') return `/documents/${entityId}/review`;
+    // scope_creep, stale_triage, blocked_sprint, missing_estimate, unplanned_work, blocked_chain
+    return `/documents/${entityId}/issues`;
+  }
+
+  if (entityType === 'program') {
+    return `/documents/${entityId}/issues`;
+  }
+
+  // issue (no tabs) and project (default tab is already issues)
+  return `/documents/${entityId}`;
 }
 
 function formatTimeAgo(dateStr: string): string {
@@ -156,7 +161,7 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-muted">Affects:</span>
           <Link
-            to={getEntityLink(props.affected_entity_type, props.affected_entity_id)}
+            to={getEntityLink(props.affected_entity_type, props.affected_entity_id, props.finding_type)}
             className="text-accent hover:underline truncate"
           >
             {props.affected_entity_name ?? `${props.affected_entity_type} ${props.affected_entity_id.slice(0, 8)}...`}
