@@ -7,6 +7,7 @@ import {
   shouldCreateFinding,
   updateExistingFinding,
   resolvePersonEntityId,
+  autoResolveStaleFindings,
 } from './finding-dedup.js';
 
 function entityTypeToBelongsTo(
@@ -116,14 +117,27 @@ export async function persistNode(
   // Suppress add_comment fallback — it's meaningless to the user
   const proposedAction =
     state.proposedAction?.type === 'add_comment' ? null : (state.proposedAction ?? null);
-  if (state.findings.length === 0) {
-    console.log('[persist] no findings to persist');
-    return { findingDocIds: [] };
-  }
-
   const client = getProactiveClient();
   if (!client) {
     console.error('[persist] no Ship client available — cannot persist findings');
+    return { findingDocIds: [] };
+  }
+
+  // A clean proactive scan (0 findings) should still auto-resolve stale findings
+  if (state.findings.length === 0) {
+    console.log('[persist] no findings to persist');
+    if (state.mode === 'proactive' && state.scanType) {
+      const existingFindings = await loadExistingFindings(client);
+      const resolvedCount = await autoResolveStaleFindings(
+        client,
+        existingFindings,
+        new Set(),
+        state.scanType,
+      );
+      if (resolvedCount > 0) {
+        console.log(`[persist] auto-resolved ${resolvedCount} stale findings (clean scan)`);
+      }
+    }
     return { findingDocIds: [] };
   }
 
@@ -132,6 +146,7 @@ export async function persistNode(
   console.log(`[persist] loaded ${existingFindings.size} existing findings for dedup`);
 
   const findingDocIds: string[] = [];
+  const reproducedKeys = new Set<string>();
   let skippedCount = 0;
 
   for (const finding of state.findings) {
@@ -142,6 +157,7 @@ export async function persistNode(
 
     // Dedup check: does a finding with this type + entity already exist?
     const dedupKey = `${finding.findingType}::${finding.affectedEntityId}`;
+    reproducedKeys.add(dedupKey);
     const existing = existingFindings.get(dedupKey);
     if (existing) {
       const decision = shouldCreateFinding(existing);
@@ -175,6 +191,7 @@ export async function persistNode(
       reasoning_model: 'gpt-4o',
       token_usage: { input: 0, output: 0 },
       trace_url: state.traceUrl ?? null,
+      last_validated_at: new Date().toISOString(),
     };
 
     const belongsTo = await resolveAssociation(client, finding);
@@ -204,6 +221,19 @@ export async function persistNode(
   console.log(
     `[persist] persisted ${findingDocIds.length - skippedCount} new, ${skippedCount} skipped (dedup), ${findingDocIds.length}/${state.findings.length} total`,
   );
+
+  // Auto-resolve stale findings (proactive scans only)
+  if (state.mode === 'proactive' && state.scanType) {
+    const resolvedCount = await autoResolveStaleFindings(
+      client,
+      existingFindings,
+      reproducedKeys,
+      state.scanType,
+    );
+    if (resolvedCount > 0) {
+      console.log(`[persist] auto-resolved ${resolvedCount} stale findings`);
+    }
+  }
 
   return { findingDocIds };
 }

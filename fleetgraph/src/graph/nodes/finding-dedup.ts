@@ -11,6 +11,7 @@ export interface FindingProps {
   status?: string;
   human_decision?: string | null;
   snooze_until?: string | null;
+  last_validated_at?: string | null;
 }
 
 const SEVERITY_RANK: Record<string, number> = {
@@ -110,6 +111,8 @@ export function resolvePersonEntityId(
 /**
  * Update an existing finding's title, content, and severity in place.
  * Severity only upgrades (takes the higher of existing vs new).
+ * Always stamps last_validated_at so the staleness auto-resolve window
+ * stays fresh for re-detected findings.
  * Returns true if an update was performed.
  */
 export async function updateExistingFinding(
@@ -127,20 +130,16 @@ export async function updateExistingFinding(
     (SEVERITY_RANK[finding.severity] ?? 0) > (SEVERITY_RANK[existingSeverity] ?? 0);
   const hasEnrichment = enrichment?.affected_entity_name || enrichment?.summary;
 
-  // Skip API call if nothing changed
-  if (!titleChanged && !severityUpgrade && !hasEnrichment) {
-    console.log(`${logPrefix} existing finding ${existing.id} unchanged — skip update`);
-    return false;
-  }
-
   const patch: Record<string, unknown> = {};
   if (titleChanged) patch.title = finding.title;
 
   const propsUpdate: Record<string, unknown> = { ...existing.properties };
-  let propsChanged = false;
+  // Always stamp last_validated_at — this keeps the staleness window fresh
+  propsUpdate.last_validated_at = new Date().toISOString();
+  let propsChanged = true; // always true now due to last_validated_at
+
   if (severityUpgrade) {
     propsUpdate.severity = finding.severity;
-    propsChanged = true;
     // Re-badge acknowledged findings on severity escalation
     if (props.human_decision === 'acknowledged') {
       propsUpdate.human_decision = null;
@@ -150,11 +149,9 @@ export async function updateExistingFinding(
   }
   if (enrichment?.affected_entity_name) {
     propsUpdate.affected_entity_name = enrichment.affected_entity_name;
-    propsChanged = true;
   }
   if (enrichment?.summary) {
     propsUpdate.summary = enrichment.summary;
-    propsChanged = true;
   }
   if (propsChanged) {
     patch.properties = propsUpdate;
@@ -171,9 +168,91 @@ export async function updateExistingFinding(
   const changes = [
     titleChanged ? `title='${finding.title}'` : null,
     severityUpgrade ? `severity=${existingSeverity}→${finding.severity}` : null,
+    !titleChanged && !severityUpgrade && !hasEnrichment ? 'last_validated_at' : null,
   ]
     .filter(Boolean)
     .join(', ');
   console.log(`${logPrefix} updated finding ${existing.id}: ${changes}`);
   return true;
+}
+
+// ── Staleness auto-resolve ──────────────────────────────────────────────────
+
+/** Staleness windows: 3 cycles per cadence before auto-resolve */
+const STALENESS_WINDOWS_MS: Record<string, number> = {
+  hot: 15 * 60 * 1000,           // 15 min (3 × 5 min)
+  daily: 72 * 60 * 60 * 1000,    // 72h (3 × 24h)
+  weekly: 21 * 24 * 60 * 60 * 1000, // 21 days (3 × 7d)
+};
+
+/** Cadence → finding types covered by that cadence */
+const CADENCE_TYPES: Record<string, Set<string>> = {
+  hot: new Set(['scope_creep', 'blocked_chain']),
+  daily: new Set(['stale_triage', 'accountability_debt', 'blocked_sprint', 'overloaded_member', 'missing_estimate', 'sprint_velocity_drop', 'unplanned_work']),
+  weekly: new Set(['retro_patterns']),
+};
+
+/**
+ * Auto-resolve stale findings after a proactive scan.
+ *
+ * A finding is stale if:
+ * 1. Its finding_type is covered by the current scan's cadence
+ * 2. Its status is 'active' (not acknowledged, snoozed, or already resolved)
+ * 3. Its last_validated_at is older than the staleness window (3 cycles)
+ * 4. It was NOT reproduced in this scan (not in reproducedKeys)
+ *
+ * Returns the number of findings auto-resolved.
+ */
+export async function autoResolveStaleFindings(
+  client: ShipClient,
+  existingFindings: Map<string, ShipDocument>,
+  reproducedKeys: Set<string>,
+  scanType: 'hot' | 'daily' | 'weekly',
+): Promise<number> {
+  const coveredTypes = CADENCE_TYPES[scanType];
+  const stalenessMs = STALENESS_WINDOWS_MS[scanType];
+  if (!coveredTypes || !stalenessMs) return 0;
+
+  const now = Date.now();
+  let resolvedCount = 0;
+
+  for (const [key, doc] of existingFindings) {
+    const props = doc.properties as FindingProps;
+
+    // Only auto-resolve active findings (not acknowledged, snoozed, etc.)
+    if (props.status !== 'active') continue;
+
+    // Only for finding types covered by this cadence
+    if (!props.finding_type || !coveredTypes.has(props.finding_type)) continue;
+
+    // Skip if this finding was reproduced in the current scan
+    if (reproducedKeys.has(key)) continue;
+
+    // Check staleness: last_validated_at must be older than the window
+    const lastValidated = props.last_validated_at
+      ? new Date(props.last_validated_at).getTime()
+      : new Date(doc.created_at).getTime(); // fallback for findings created before this feature
+
+    if (now - lastValidated < stalenessMs) continue;
+
+    // Auto-resolve
+    const result = await client.updateDocument(doc.id, {
+      properties: {
+        ...doc.properties as Record<string, unknown>,
+        status: 'resolved',
+        human_decision: null,
+        resolved_reason: 'auto',
+      },
+    });
+
+    if (result.error) {
+      console.error(`[auto-resolve] failed to resolve ${doc.id}: ${result.error.message}`);
+      continue;
+    }
+
+    console.log(`[auto-resolve] resolved stale finding ${doc.id} (${props.finding_type}::${props.affected_entity_id}) — not seen in ${Math.round((now - lastValidated) / 60000)}min`);
+    resolvedCount++;
+  }
+
+  return resolvedCount;
 }
