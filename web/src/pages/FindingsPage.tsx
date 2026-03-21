@@ -5,7 +5,7 @@ import { useFindingsQuery, type FindingDocument } from '@/hooks/useFindingsQuery
 import { useFleetGraphDecide } from '@/hooks/useFleetGraph';
 import { useInvalidateFindings } from '@/hooks/useFindingsQuery';
 
-type FilterTab = 'all' | 'active' | 'acknowledged' | 'snoozed';
+type FilterTab = 'all' | 'active' | 'acknowledged' | 'snoozed' | 'resolved';
 
 const severityStyles = {
   info: 'border-blue-500/30 bg-blue-500/5',
@@ -202,16 +202,19 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
         </div>
       )}
 
-      {/* Status badge for decided findings */}
-      {props?.human_decision && (
+      {/* Status badge for decided/resolved findings */}
+      {(props?.human_decision || props?.status === 'resolved') && (
         <span className={cn(
           'inline-flex rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
+          props.status === 'resolved' && !props.human_decision ? 'bg-green-600/20 text-green-400' :
           props.human_decision === 'confirmed' ? 'bg-green-600/20 text-green-400' :
           props.human_decision === 'acknowledged' ? 'bg-border text-muted' :
           props.human_decision === 'snoozed' ? 'bg-yellow-600/20 text-yellow-400' :
           'bg-border text-muted',
         )}>
-          {props.human_decision === 'confirmed' ? 'approved' : props.human_decision}
+          {props.status === 'resolved' && !props.human_decision ? 'auto-resolved' :
+           props.human_decision === 'confirmed' ? 'approved' :
+           props.human_decision}
         </span>
       )}
 
@@ -246,6 +249,7 @@ export function FindingsPage() {
       case 'active': return props?.human_decision === null && (props?.status === 'active' || props?.status === 'pending_decision');
       case 'acknowledged': return props?.human_decision === 'acknowledged';
       case 'snoozed': return props?.human_decision === 'snoozed';
+      case 'resolved': return props?.status === 'resolved';
       default: return true;
     }
   });
@@ -255,6 +259,7 @@ export function FindingsPage() {
     active: findings?.filter(f => f.properties?.human_decision === null && (f.properties?.status === 'active' || f.properties?.status === 'pending_decision')).length || 0,
     acknowledged: findings?.filter(f => f.properties?.human_decision === 'acknowledged').length || 0,
     snoozed: findings?.filter(f => f.properties?.human_decision === 'snoozed').length || 0,
+    resolved: findings?.filter(f => f.properties?.status === 'resolved').length || 0,
   };
 
   const tabs: { key: FilterTab; label: string }[] = [
@@ -262,6 +267,7 @@ export function FindingsPage() {
     { key: 'active', label: 'Active' },
     { key: 'acknowledged', label: 'Acknowledged' },
     { key: 'snoozed', label: 'Snoozed' },
+    { key: 'resolved', label: 'Resolved' },
   ];
 
   return (

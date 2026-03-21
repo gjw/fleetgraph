@@ -1,5 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiGet } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import { useTeamMembersQuery } from '@/hooks/useTeamMembersQuery';
 
 export interface FindingDocument {
   id: string;
@@ -19,6 +21,9 @@ export interface FindingDocument {
     } | null;
     human_decision: 'confirmed' | 'acknowledged' | 'snoozed' | null;
     snooze_until: string | null;
+    recipient_ids?: string[];
+    resolved_reason?: 'auto' | null;
+    last_validated_at?: string | null;
     reasoning_model: string;
     token_usage: { input: number; output: number };
     trace_url: string | null;
@@ -56,10 +61,36 @@ export function useFindingsQuery() {
   });
 }
 
+/**
+ * Count of active findings addressed to the current user.
+ * Maps auth user ID → person document ID via team members, then filters
+ * findings by recipient_ids. Falls back to total active count if the
+ * mapping isn't available yet.
+ */
 export function useFindingsActiveCount(): number {
   const { data: findings } = useFindingsQuery();
+  const { user } = useAuth();
+  const { data: teamMembers } = useTeamMembersQuery();
+
   if (!findings) return 0;
-  return findings.filter(f => f.properties?.human_decision === null && (f.properties?.status === 'active' || f.properties?.status === 'pending_decision')).length;
+
+  // Map current user to their person document ID
+  const personId = user?.id && teamMembers
+    ? teamMembers.find(m => m.user_id === user.id)?.id ?? null
+    : null;
+
+  return findings.filter(f => {
+    const props = f.properties;
+    if (!props) return false;
+    if (props.human_decision !== null) return false;
+    if (props.status !== 'active' && props.status !== 'pending_decision') return false;
+    // Filter by recipient if we can resolve the person ID
+    if (personId && props.recipient_ids) {
+      return props.recipient_ids.includes(personId);
+    }
+    // Fallback: show all active if mapping unavailable
+    return true;
+  }).length;
 }
 
 export function useInvalidateFindings() {
