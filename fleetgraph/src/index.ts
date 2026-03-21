@@ -1,7 +1,7 @@
 import { loadConfig } from './config.js';
 import { buildGraph } from './graph/graph.js';
 import { createApp } from './api/server.js';
-import { startProactivePoller } from './trigger/poller.js';
+import { startPollers } from './trigger/poller.js';
 
 const config = loadConfig();
 const graph = buildGraph();
@@ -13,5 +13,5 @@ app.listen(config.port, () => {
   console.log(`LangSmith: ${config.langsmithProject} (tracing: ${config.langsmithTracing})`);
 
   // Start proactive polling after server is ready
-  startProactivePoller(graph);
+  startPollers(graph);
 });

@@ -24,6 +24,12 @@ export async function fetchIssuesNode(
     return { fetchErrors: { 'fetch-issues': 'No Ship client configured' } };
   }
 
+  // Weekly scan only analyzes retro content — no issues needed
+  if (state.mode === 'proactive' && state.scanType === 'weekly') {
+    console.log('[fetch-issues] weekly scan — skipping issues');
+    return { issues: [], dependencyChain: [] };
+  }
+
   let issues: ShipIssue[] = [];
   let dependencyChain: GraphUpdateType['dependencyChain'] = [];
 

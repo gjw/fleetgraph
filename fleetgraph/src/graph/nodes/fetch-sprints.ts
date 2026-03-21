@@ -21,11 +21,21 @@ export async function fetchSprintsNode(
     return fetchOnDemandSprints(client, state);
   }
 
-  return fetchProactiveSprints(client);
+  return fetchProactiveSprints(client, state.scanType);
 }
 
-async function fetchProactiveSprints(client: ShipClient): Promise<Partial<GraphUpdateType>> {
+async function fetchProactiveSprints(
+  client: ShipClient,
+  scanType: 'hot' | 'daily' | 'weekly' | null,
+): Promise<Partial<GraphUpdateType>> {
   const errors: Record<string, string> = {};
+
+  // What to fetch depends on cadence
+  const needSprintIssues = scanType !== 'weekly';
+  const needScopeChanges = scanType !== 'weekly';
+  const needRetros = scanType === 'weekly';
+  // Hot only needs active sprints; daily/weekly need all for accountability/retro checks
+  const activeOnly = scanType === 'hot';
 
   const projectsResult = await client.getProjects();
   if (projectsResult.error) {
@@ -50,9 +60,15 @@ async function fetchProactiveSprints(client: ShipClient): Promise<Partial<GraphU
         errors[`sprint-${ps.id}`] = sprintResult.error.message;
         continue;
       }
+
+      // Hot scan: skip completed sprints entirely (only need active for scope creep)
+      if (activeOnly && sprintResult.data.status !== 'active') {
+        continue;
+      }
+
       allSprints.push(sprintResult.data);
 
-      if (sprintResult.data.status === 'active') {
+      if (needSprintIssues && sprintResult.data.status === 'active') {
         const issuesResult = await client.getSprintIssues(ps.id);
         if (issuesResult.error) {
           errors[`sprint-issues-${ps.id}`] = issuesResult.error.message;
@@ -66,22 +82,25 @@ async function fetchProactiveSprints(client: ShipClient): Promise<Partial<GraphU
   const activeSprints = allSprints.filter(s => s.status === 'active');
   const scopeChanges: GraphUpdateType['scopeChanges'] = [];
 
-  for (const sprint of activeSprints) {
-    const scResult = await client.getSprintScopeChanges(sprint.id);
-    if (scResult.data) {
-      scopeChanges.push({
-        sprintId: sprint.id,
-        sprintName: sprint.name ?? `Sprint ${sprint.sprint_number}`,
-        ...scResult.data,
-      });
+  if (needScopeChanges) {
+    for (const sprint of activeSprints) {
+      const scResult = await client.getSprintScopeChanges(sprint.id);
+      if (scResult.data) {
+        scopeChanges.push({
+          sprintId: sprint.id,
+          sprintName: sprint.name ?? `Sprint ${sprint.sprint_number}`,
+          ...scResult.data,
+        });
+      }
     }
   }
 
-  // Fetch retro content from completed sprints
-  const retroContent = await fetchRetroContent(client, allSprints);
+  // Retro content: weekly only
+  const retroContent = needRetros ? await fetchRetroContent(client, allSprints) : [];
 
+  const cadenceLabel = scanType ?? 'full';
   console.log(
-    `[fetch-sprints] proactive: ${allSprints.length} sprints (${activeSprints.length} active), ` +
+    `[fetch-sprints] proactive (${cadenceLabel}): ${allSprints.length} sprints (${activeSprints.length} active), ` +
     `${allSprintIssues.length} sprint issues, ${scopeChanges.length} scope change sets, ${projects.length} projects, ` +
     `${retroContent.length} retros`,
   );
@@ -193,7 +212,7 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
 
   // No specific context — fall back to proactive-style fetch
   console.log('[fetch-sprints] on-demand: no sprint/project context, falling back to full fetch');
-  return fetchProactiveSprints(client);
+  return fetchProactiveSprints(client, null);
 }
 
 // ── Retro content fetching ──────────────────────────────────────────────────

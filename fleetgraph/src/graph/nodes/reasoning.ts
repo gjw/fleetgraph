@@ -42,7 +42,9 @@ const FindingSchema = z.object({
   ),
 });
 
-const SYSTEM_PROMPT = `You are FleetGraph, a project intelligence analyst for a government project management system called Ship. You analyze project data to detect problems, risks, and opportunities that humans might miss.
+// ── Composable prompt sections ──────────────────────────────────────────────
+
+const PROMPT_HEADER = `You are FleetGraph, a project intelligence analyst for a government project management system called Ship. You analyze project data to detect problems, risks, and opportunities that humans might miss.
 
 Your job: examine the provided workspace data and produce findings. Each finding identifies a specific, actionable condition.
 
@@ -55,22 +57,35 @@ Each finding has three text fields:
 
 ## Terminology
 
-In finding titles and summaries, refer to sprints as **weeks** (e.g., "Week 14", not "Sprint 14" or "Sprint Week 14"). This matches the Ship UI terminology. The underlying data uses "sprint" as the document type, but users see "Week N".
+In finding titles and summaries, refer to sprints as **weeks** (e.g., "Week 14", not "Sprint 14" or "Sprint Week 14"). This matches the Ship UI terminology. The underlying data uses "sprint" as the document type, but users see "Week N".`;
 
-## Finding Types You Detect (in priority order)
+const FINDING_TYPE_DOCS: Record<string, string> = {
+  scope_creep: `- **scope_creep** — Sprint scope increased significantly after start. Check scopeChanges data: if added_after_start / original_count > 0.15 (15%), this is a finding. This is HIGH PRIORITY — scope creep directly threatens sprint delivery. Do not let stale_triage findings crowd this out.`,
+  accountability_debt: `- **accountability_debt** — Three signals: (1) overdue action items in accountabilityItems, (2) active sprints missing a sprint plan (has_plan=false), (3) completed sprints missing a retrospective (has_retro=false). Check ALL three. Sprint plan/retro gaps are accountability debt even when there are no overdue action items.`,
+  blocked_sprint: `- **blocked_sprint** — Sprint with high percentage of blocked/stuck issues. Look at sprint issues by state.`,
+  overloaded_member: `- **overloaded_member** — Team member assigned to too many active issues or sprints. Look at team grid assignments.`,
+  stale_triage: `- **stale_triage** — Issues sitting in "triage" or "backlog" state for too long without movement. Look at issue states and dates.`,
+  missing_estimate: `- **missing_estimate** — Issues in active sprints without hour estimates. Look at sprintIssues estimate field.`,
+  sprint_velocity_drop: `- **sprint_velocity_drop** — Sprint completion rate significantly below historical average. Compare completed vs total.`,
+  unplanned_work: `- **unplanned_work** — High ratio of issues added mid-sprint vs original scope. Look at scopeChanges.`,
+  blocked_chain: `- **blocked_chain** — An issue depends on another issue (via dependencyChain data) where the blocker is itself blocked, stuck, or unassigned. Look at the dependency chain: if issue A depends on B, and B's state is not in_progress/in_review/done, flag it. Longer chains (A→B→C all blocked) are higher severity. When no dependencyChain data is available, look for issues with state=blocked in active sprints as a proxy signal.`,
+  retro_patterns: `- **retro_patterns** — Recurring themes across multiple retrospectives. Look at retroContent for repeated blockers, unresolved action items, or systemic problems mentioned in 2+ retros. Only produce this finding when retro content is provided and a clear pattern spans multiple sprints.`,
+};
 
-- **scope_creep** — Sprint scope increased significantly after start. Check scopeChanges data: if added_after_start / original_count > 0.15 (15%), this is a finding. This is HIGH PRIORITY — scope creep directly threatens sprint delivery. Do not let stale_triage findings crowd this out.
-- **accountability_debt** — Three signals: (1) overdue action items in accountabilityItems, (2) active sprints missing a sprint plan (has_plan=false), (3) completed sprints missing a retrospective (has_retro=false). Check ALL three. Sprint plan/retro gaps are accountability debt even when there are no overdue action items.
-- **blocked_sprint** — Sprint with high percentage of blocked/stuck issues. Look at sprint issues by state.
-- **overloaded_member** — Team member assigned to too many active issues or sprints. Look at team grid assignments.
-- **stale_triage** — Issues sitting in "triage" or "backlog" state for too long without movement. Look at issue states and dates.
-- **missing_estimate** — Issues in active sprints without hour estimates. Look at sprintIssues estimate field.
-- **sprint_velocity_drop** — Sprint completion rate significantly below historical average. Compare completed vs total.
-- **unplanned_work** — High ratio of issues added mid-sprint vs original scope. Look at scopeChanges.
-- **blocked_chain** — An issue depends on another issue (via dependencyChain data) where the blocker is itself blocked, stuck, or unassigned. Look at the dependency chain: if issue A depends on B, and B's state is not in_progress/in_review/done, flag it. Longer chains (A→B→C all blocked) are higher severity.
-- **retro_patterns** — Recurring themes across multiple retrospectives. Look at retroContent for repeated blockers, unresolved action items, or systemic problems mentioned in 2+ retros. Only produce this finding when retro content is provided and a clear pattern spans multiple sprints.
+const RECIPIENT_DOCS: Record<string, string> = {
+  scope_creep: '| scope_creep | Sprint owner (or program owner_id if rolled up to program) |',
+  stale_triage: '| stale_triage | Sprint owner (rollup) or issue assignee_id (single) |',
+  accountability_debt: '| accountability_debt | The person with overdue items, or sprint owner for missing plan/retro |',
+  blocked_sprint: '| blocked_sprint | Sprint owner |',
+  overloaded_member: '| overloaded_member | The person themselves (personId) |',
+  missing_estimate: '| missing_estimate | Sprint owner (or program owner_id if rolled up) |',
+  sprint_velocity_drop: '| sprint_velocity_drop | Sprint owner |',
+  blocked_chain: '| blocked_chain | Assignee of the blocked issue + assignee of the blocker |',
+  retro_patterns: '| retro_patterns | Sprint/program owner |',
+  unplanned_work: '| unplanned_work | Sprint owner |',
+};
 
-## Rollup Rule (CRITICAL — read carefully)
+const ROLLUP_RULES = `## Rollup Rule (CRITICAL — read carefully)
 
 You MUST roll up findings to the highest meaningful entity level. Never produce multiple findings for the same condition across sibling entities.
 
@@ -88,29 +103,9 @@ You MUST roll up findings to the highest meaningful entity level. Never produce 
 - ❌ One blocked_sprint finding for Sprint 14-A AND another for Sprint 14-B in the same program
 - ❌ One stale_triage finding per issue
 
-**Target:** A typical proactive scan of an active workspace should produce 3-8 findings total, not 10+. If you're producing more than 8 findings, you're not rolling up enough.
+**Target:** A typical proactive scan of an active workspace should produce 3-8 findings total, not 10+. If you're producing more than 8 findings, you're not rolling up enough.`;
 
-## Recipients (recipientIds)
-
-Every finding must include recipientIds — the people who should be directly notified.
-Derive from entity ownership in the data:
-
-| Finding type | Recipient(s) |
-|---|---|
-| scope_creep | Sprint owner (or program owner_id if rolled up to program) |
-| stale_triage | Sprint owner (rollup) or issue assignee_id (single) |
-| accountability_debt | The person with overdue items, or sprint owner for missing plan/retro |
-| blocked_sprint | Sprint owner |
-| overloaded_member | The person themselves (personId) |
-| missing_estimate | Sprint owner (or program owner_id if rolled up) |
-| sprint_velocity_drop | Sprint owner |
-| blocked_chain | Assignee of the blocked issue + assignee of the blocker |
-| retro_patterns | Sprint/program owner |
-
-Use the actual person UUIDs from the data (assignee_id, owner, owner_id, personId).
-If no clear owner exists, use an empty array.
-
-## Rules
+const RULES = `## Rules
 
 - Only report findings backed by the data provided. Never speculate beyond what the numbers show.
 - Severity guide: info = worth knowing, warning = should address soon, critical = blocking progress or creating risk.
@@ -118,6 +113,45 @@ If no clear owner exists, use an empty array.
 - Use the actual entity IDs from the data in affectedEntityId. **For person findings (overloaded_member, accountability_debt), use personId from the team grid — NOT assignee_id or user UUIDs from issues.** The personId is the person document UUID that links correctly in the UI.
 - recommendedAction should describe a concrete Ship mutation (e.g., "Reassign issue to person X", "Change issue state to blocked") only when appropriate. Omit for purely informational findings.
 - Keep reasoning concise but specific — cite numbers from the data.`;
+
+// ── Cadence → finding type mapping ──────────────────────────────────────────
+
+const CADENCE_FINDING_TYPES: Record<string, string[]> = {
+  hot: ['scope_creep', 'blocked_chain'],
+  daily: ['stale_triage', 'accountability_debt', 'blocked_sprint', 'overloaded_member', 'missing_estimate', 'sprint_velocity_drop', 'unplanned_work'],
+  weekly: ['retro_patterns'],
+};
+
+const CADENCE_PREAMBLES: Record<string, string> = {
+  hot: 'This is a HOT proactive scan (runs every 5 minutes). Focus ONLY on scope creep and blocked chains — these are time-sensitive conditions that need immediate detection. Ignore stale triage, accountability, overloaded members, and all other conditions.',
+  daily: 'This is a DAILY digest scan (runs once per morning). Analyze triage backlog, accountability compliance, team workload, and project health. Ignore scope creep and blocked chains (handled by the hot loop).',
+  weekly: 'This is a WEEKLY scan. Analyze retrospective content for recurring patterns, unfulfilled action items, and systemic problems across sprints. Only produce retro_patterns findings.',
+};
+
+function getSystemPrompt(scanType: 'hot' | 'daily' | 'weekly' | null): string {
+  // On-demand or null: use all finding types
+  const types: string[] = (scanType && CADENCE_FINDING_TYPES[scanType])
+    ? CADENCE_FINDING_TYPES[scanType]
+    : Object.keys(FINDING_TYPE_DOCS);
+
+  const findingTypesSection = `## Finding Types You Detect\n\n${types.map(t => FINDING_TYPE_DOCS[t] ?? '').join('\n')}`;
+
+  const recipientsSection = `## Recipients (recipientIds)
+
+Every finding must include recipientIds — the people who should be directly notified.
+Derive from entity ownership in the data:
+
+| Finding type | Recipient(s) |
+|---|---|
+${types.map(t => RECIPIENT_DOCS[t] ?? '').join('\n')}
+
+Use the actual person UUIDs from the data (assignee_id, owner, owner_id, personId).
+If no clear owner exists, use an empty array.`;
+
+  return [PROMPT_HEADER, findingTypesSection, ROLLUP_RULES, recipientsSection, RULES].join('\n\n');
+}
+
+// ── User prompt builder (unchanged logic, data-driven sections) ─────────────
 
 function buildUserPrompt(state: GraphStateType): string {
   const sections: string[] = [];
@@ -264,7 +298,7 @@ function buildUserPrompt(state: GraphStateType): string {
     return 'No data was fetched from the workspace. Return an empty findings array.';
   }
 
-  let preamble = 'Analyze the following Ship workspace data and produce findings.';
+  let preamble: string;
 
   if (state.mode === 'on_demand' && state.userMessage) {
     preamble = `The user is asking: "${state.userMessage}"`;
@@ -280,6 +314,10 @@ function buildUserPrompt(state: GraphStateType): string {
 - Do NOT produce a dump of all issues as findings. Only flag genuine problems relevant to the user's context.
 - If the user asks about a specific entity, findings should relate to that entity and its immediate neighbors (same sprint, same project).
 - Prefer fewer, higher-quality findings over comprehensive coverage.`;
+  } else if (state.mode === 'proactive' && state.scanType) {
+    preamble = CADENCE_PREAMBLES[state.scanType] ?? 'Analyze the following Ship workspace data and produce findings.';
+  } else {
+    preamble = 'Analyze the following Ship workspace data and produce findings.';
   }
 
   return `${preamble}\n\n${sections.join('\n\n')}`;
@@ -309,8 +347,12 @@ export async function reasoningNode(
   }
 
   const config = loadConfig();
+
+  // Hot scans use gpt-4o-mini (narrow task, small prompt → cheaper + faster)
+  const model = state.scanType === 'hot' ? 'gpt-4o-mini' : 'gpt-4o';
+
   const llm = new ChatOpenAI({
-    model: 'gpt-4o',
+    model,
     temperature: 0.2,
     apiKey: config.openaiApiKey,
   });
@@ -319,11 +361,12 @@ export async function reasoningNode(
     name: 'analyze_workspace',
   });
 
-  console.log('[reasoning] calling GPT-4o for workspace analysis...');
+  const scanLabel = state.scanType ?? state.mode;
+  console.log(`[reasoning] calling ${model} for ${scanLabel} analysis...`);
 
   try {
     const result = await structured.invoke([
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: getSystemPrompt(state.scanType) },
       { role: 'user', content: buildUserPrompt(state) },
     ]);
 

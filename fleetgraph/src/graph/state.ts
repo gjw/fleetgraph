@@ -35,6 +35,10 @@ export interface ProposedAction {
 export const GraphState = Annotation.Root({
   // Trigger
   mode: Annotation<'proactive' | 'on_demand'>,
+  scanType: Annotation<'hot' | 'daily' | 'weekly' | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
   triggerId: Annotation<string>,
 
   // Context

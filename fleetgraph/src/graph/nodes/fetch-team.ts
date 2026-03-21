@@ -10,6 +10,12 @@ export async function fetchTeamNode(
     return { fetchErrors: { 'fetch-team': 'No Ship client configured' } };
   }
 
+  // Hot scan only needs sprint issues + scope changes; weekly only needs retros
+  if (state.mode === 'proactive' && (state.scanType === 'hot' || state.scanType === 'weekly')) {
+    console.log(`[fetch-team] ${state.scanType} scan — skipping team data`);
+    return { team: null, accountabilityItems: null, programs: [] };
+  }
+
   const errors: Record<string, string> = {};
 
   const [teamResult, accountabilityResult, programsResult] = await Promise.all([

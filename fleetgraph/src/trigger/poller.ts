@@ -1,9 +1,15 @@
 import { loadConfig } from '../config.js';
 
-const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-const STARTUP_DELAY_MS = 10_000; // 10 seconds — wait for Ship API to be ready
+const HOT_INTERVAL_MS = 5 * 60 * 1000;             // 5 minutes
+const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;     // 24 hours
+const WEEKLY_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 const HEALTH_RETRY_MS = 3_000;
 const MAX_HEALTH_RETRIES = 10;
+
+type GraphLike = {
+  invoke: (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
+};
 
 /**
  * Wait for Ship API to be reachable before starting polls.
@@ -31,36 +37,64 @@ async function waitForShip(): Promise<boolean> {
 }
 
 /**
- * Starts the proactive poller. Waits for Ship API to be ready,
- * then fires every 5 minutes.
+ * Run a single cadence poll and log results.
  */
-export function startProactivePoller(
-  graph: { invoke: (input: Record<string, unknown>) => Promise<Record<string, unknown>> },
-): void {
-  console.log(`[poller] will start proactive poll after Ship API is ready`);
+async function runCadence(
+  graph: GraphLike,
+  scanType: 'hot' | 'daily' | 'weekly',
+): Promise<void> {
+  const triggerId = `${scanType}-${Date.now()}`;
+  console.log(`[poller:${scanType}] invoking graph — triggerId=${triggerId}`);
+  try {
+    const result = await graph.invoke({
+      mode: 'proactive',
+      scanType,
+      triggerId,
+    });
+    const findings = result.findings as unknown[];
+    const classification = result.classification as string;
+    console.log(
+      `[poller:${scanType}] complete — classification=${classification}, findings=${findings.length}`,
+    );
+  } catch (err) {
+    console.error(`[poller:${scanType}] graph invocation failed:`, err);
+  }
+}
 
-  const poll = async () => {
-    const triggerId = `poll-${Date.now()}`;
-    console.log(`[poller] invoking graph — triggerId=${triggerId}`);
-    try {
-      const result = await graph.invoke({
-        mode: 'proactive',
-        triggerId,
-      });
-      const findings = result.findings as unknown[];
-      const classification = result.classification as string;
-      console.log(
-        `[poller] complete — classification=${classification}, findings=${findings.length}`,
-      );
-    } catch (err) {
-      console.error('[poller] graph invocation failed:', err);
-    }
-  };
+/**
+ * Starts all three proactive pollers: hot (5min), daily (24h), weekly (7d).
+ * Waits for Ship API to be ready, then staggers first runs to avoid
+ * concurrent initial invocations.
+ */
+export function startPollers(graph: GraphLike): void {
+  console.log('[poller] will start cadenced polls after Ship API is ready');
 
-  // Wait for Ship, then start polling
   waitForShip().then(() => {
-    console.log(`[poller] starting proactive poll every ${POLL_INTERVAL_MS / 1000}s`);
-    poll();
-    setInterval(poll, POLL_INTERVAL_MS);
+    // Hot: every 5 minutes, starts immediately
+    console.log(`[poller:hot] starting — interval=${HOT_INTERVAL_MS / 1000}s`);
+    runCadence(graph, 'hot');
+    setInterval(() => runCadence(graph, 'hot'), HOT_INTERVAL_MS);
+
+    // Daily: every 24 hours, staggered 30s after hot
+    // NOTE: setInterval drifts on restart — acceptable for MVP since CLI covers demo
+    setTimeout(() => {
+      console.log(`[poller:daily] starting — interval=${DAILY_INTERVAL_MS / 1000}s`);
+      runCadence(graph, 'daily');
+      setInterval(() => runCadence(graph, 'daily'), DAILY_INTERVAL_MS);
+    }, 30_000);
+
+    // Weekly: every 7 days, staggered 60s after hot
+    setTimeout(() => {
+      console.log(`[poller:weekly] starting — interval=${WEEKLY_INTERVAL_MS / 1000}s`);
+      runCadence(graph, 'weekly');
+      setInterval(() => runCadence(graph, 'weekly'), WEEKLY_INTERVAL_MS);
+    }, 60_000);
   });
+}
+
+/**
+ * @deprecated Use startPollers() instead. Kept for backwards compatibility.
+ */
+export function startProactivePoller(graph: GraphLike): void {
+  startPollers(graph);
 }
