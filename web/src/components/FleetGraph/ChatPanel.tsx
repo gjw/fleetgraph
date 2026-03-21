@@ -11,6 +11,34 @@ interface Message {
   findingDocIds?: string[];
 }
 
+interface PromptButton {
+  label: string;
+  message: string;
+}
+
+const PROMPTS_BY_TYPE: Record<string, PromptButton[]> = {
+  sprint: [
+    { label: 'Analyze this week', message: 'Analyze this week — what should I know?' },
+    { label: 'Check for risks', message: 'Are there any risks in this sprint? Scope creep, blocked issues, missing estimates?' },
+  ],
+  issue: [
+    { label: "What's blocking this?", message: "What's blocking this issue?" },
+    { label: 'What should I work on next?', message: "Based on priorities and deadlines, what should I work on next?" },
+  ],
+  project: [
+    { label: 'Assess project health', message: 'How is this project doing overall? Any risks or patterns?' },
+    { label: 'Any retro patterns?', message: 'Are there recurring themes across retrospectives for this project?' },
+  ],
+  program: [
+    { label: 'Full program analysis', message: 'Run a full analysis of this program — scope, velocity, accountability, team health.' },
+    { label: 'Team accountability check', message: 'How is the team doing on standups, sprint plans, and retrospectives?' },
+  ],
+};
+
+const DEFAULT_PROMPTS: PromptButton[] = [
+  { label: 'Analyze this page', message: 'What should I know about this document?' },
+];
+
 interface ChatPanelProps {
   documentId: string;
   documentType: string;
@@ -44,17 +72,16 @@ export function ChatPanel({ documentId, documentType }: ChatPanelProps) {
     setMessages([]);
   }, [documentId]);
 
-  const handleSend = useCallback(async () => {
-    const trimmed = input.trim();
-    if (!trimmed || chatMutation.isPending) return;
+  const sendMessage = useCallback(async (text: string) => {
+    if (!text || chatMutation.isPending) return;
 
-    const userMessage: Message = { role: 'user', content: trimmed };
+    const userMessage: Message = { role: 'user', content: text };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
 
     try {
       const result = await chatMutation.mutateAsync({
-        message: trimmed,
+        message: text,
         documentId,
         documentType,
       });
@@ -72,7 +99,11 @@ export function ChatPanel({ documentId, documentType }: ChatPanelProps) {
         content: 'Sorry, something went wrong. FleetGraph may be unavailable.',
       }]);
     }
-  }, [input, chatMutation, documentId, documentType]);
+  }, [chatMutation, documentId, documentType]);
+
+  const handleSend = useCallback(() => {
+    sendMessage(input.trim());
+  }, [input, sendMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -109,9 +140,23 @@ export function ChatPanel({ documentId, documentType }: ChatPanelProps) {
           {/* Messages area */}
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {messages.length === 0 && (
-              <p className="text-xs text-muted italic">
-                Ask FleetGraph about this document — scope creep, stale items, accountability gaps, or anything else.
-              </p>
+              <div className="space-y-2">
+                <p className="text-xs text-muted italic">
+                  Ask FleetGraph about this document, or try:
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(PROMPTS_BY_TYPE[documentType] ?? DEFAULT_PROMPTS).map((prompt) => (
+                    <button
+                      key={prompt.label}
+                      onClick={() => sendMessage(prompt.message)}
+                      disabled={chatMutation.isPending}
+                      className="rounded-full border border-border bg-surface px-3 py-1 text-xs text-foreground hover:bg-border/50 hover:border-accent/50 disabled:opacity-50 transition-colors"
+                    >
+                      {prompt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
 
             {messages.map((msg, i) => (
