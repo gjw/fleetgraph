@@ -3,43 +3,52 @@ import { z } from 'zod';
 import type { GraphStateType, GraphUpdateType } from '../state.js';
 import { loadConfig } from '../../config.js';
 
-const FindingSchema = z.object({
-  findings: z.array(
-    z.object({
-      findingType: z
-        .string()
-        .describe(
-          'Snake_case category: scope_creep, stale_triage, accountability_debt, blocked_sprint, overloaded_member, missing_estimate, sprint_velocity_drop, unplanned_work',
-        ),
-      severity: z.enum(['info', 'warning', 'critical']),
-      affectedEntityId: z
-        .string()
-        .describe('UUID of the affected entity. For person findings, use personId from the team grid (the person document UUID), NOT assignee_id or user UUIDs from issues.'),
-      affectedEntityType: z.enum(['issue', 'sprint', 'project', 'program', 'person']),
-      title: z.string().describe('Short human-readable title, under 80 chars'),
-      summary: z
-        .string()
-        .describe(
-          'One to two sentence detail line beneath the title. Provides the "so what" — cite specific numbers, names, and timeframes. E.g., "29 active issues across 2 programs. 79h estimated in FleetGraph Demo Week 14."',
-        ),
-      reasoning: z
-        .string()
-        .describe(
-          'Detailed explanation of what was found, why it matters, and what is recommended. 2-4 sentences.',
-        ),
-      recommendedAction: z
-        .string()
-        .nullable()
-        .describe(
-          'If a Ship mutation would help (reassign, change state, escalate), describe it here. Null for informational findings.',
-        ),
-      recipientIds: z
-        .array(z.string())
-        .describe(
-          'Person IDs (UUIDs) of the people who should be directly notified about this finding. Derive from entity ownership: assignee_id for issues, owner for sprints/projects, owner_id for programs. Use the actual IDs from the data.',
-        ),
-    }),
-  ),
+const findingsArray = z.array(
+  z.object({
+    findingType: z
+      .string()
+      .describe(
+        'Snake_case category: scope_creep, stale_triage, accountability_debt, blocked_sprint, overloaded_member, missing_estimate, sprint_velocity_drop, unplanned_work',
+      ),
+    severity: z.enum(['info', 'warning', 'critical']),
+    affectedEntityId: z
+      .string()
+      .describe('UUID of the affected entity. For person findings, use personId from the team grid (the person document UUID), NOT assignee_id or user UUIDs from issues.'),
+    affectedEntityType: z.enum(['issue', 'sprint', 'project', 'program', 'person']),
+    title: z.string().describe('Short human-readable title, under 80 chars'),
+    summary: z
+      .string()
+      .describe(
+        'One to two sentence detail line beneath the title. Provides the "so what" — cite specific numbers, names, and timeframes. E.g., "29 active issues across 2 programs. 79h estimated in FleetGraph Demo Week 14."',
+      ),
+    reasoning: z
+      .string()
+      .describe(
+        'Detailed explanation of what was found, why it matters, and what is recommended. 2-4 sentences.',
+      ),
+    recommendedAction: z
+      .string()
+      .nullable()
+      .describe(
+        'If a Ship mutation would help (reassign, change state, escalate), describe it here. Null for informational findings.',
+      ),
+    recipientIds: z
+      .array(z.string())
+      .describe(
+        'Person IDs (UUIDs) of the people who should be directly notified about this finding. Derive from entity ownership: assignee_id for issues, owner for sprints/projects, owner_id for programs. Use the actual IDs from the data.',
+      ),
+  }),
+);
+
+const FindingSchema = z.object({ findings: findingsArray });
+
+const OnDemandSchema = z.object({
+  response: z
+    .string()
+    .describe(
+      'A direct, conversational answer to the user\'s question. 2-5 sentences. Reference specific data from the workspace (names, numbers, dates). If the question is not about project data, politely deflect: "I analyze project data — try asking about your sprint, issues, or team."',
+    ),
+  findings: findingsArray,
 });
 
 // ── Composable prompt sections ──────────────────────────────────────────────
@@ -128,7 +137,7 @@ const CADENCE_PREAMBLES: Record<string, string> = {
   weekly: 'This is a WEEKLY scan. Analyze retrospective content for recurring patterns, unfulfilled action items, and systemic problems across sprints. Only produce retro_patterns findings.',
 };
 
-function getSystemPrompt(scanType: 'hot' | 'daily' | 'weekly' | null): string {
+function getSystemPrompt(scanType: 'hot' | 'daily' | 'weekly' | null, isOnDemand: boolean): string {
   // On-demand or null: use all finding types
   const types: string[] = (scanType && CADENCE_FINDING_TYPES[scanType])
     ? CADENCE_FINDING_TYPES[scanType]
@@ -148,7 +157,20 @@ ${types.map(t => RECIPIENT_DOCS[t] ?? '').join('\n')}
 Use the actual person UUIDs from the data (assignee_id, owner, owner_id, personId).
 If no clear owner exists, use an empty array.`;
 
-  return [PROMPT_HEADER, findingTypesSection, ROLLUP_RULES, recipientsSection, RULES].join('\n\n');
+  const sections = [PROMPT_HEADER, findingTypesSection, ROLLUP_RULES, recipientsSection, RULES];
+
+  if (isOnDemand) {
+    sections.push(`## On-Demand Response (CRITICAL)
+
+Your PRIMARY output is the \`response\` field — a direct, conversational answer to the user's question. The user is chatting with you and expects their question answered, not a generic analysis dump.
+
+- **Answer the question first.** The \`response\` field must directly address what the user asked. Reference specific data (names, numbers, dates).
+- **Findings are supporting evidence.** Only include findings that are relevant to the user's question. An empty findings array is fine if the answer doesn't warrant structured findings.
+- **If the question is off-topic** (greetings, non-project questions), set \`response\` to a polite deflection and return an empty findings array.
+- **Be conversational.** Write as a knowledgeable colleague, not a report generator. 2-5 sentences.`);
+  }
+
+  return sections.join('\n\n');
 }
 
 // ── User prompt builder (unchanged logic, data-driven sections) ─────────────
@@ -301,7 +323,7 @@ function buildUserPrompt(state: GraphStateType): string {
   let preamble: string;
 
   if (state.mode === 'on_demand' && state.userMessage) {
-    preamble = `The user is asking: "${state.userMessage}"`;
+    preamble = `The user asked: "${state.userMessage}"\nYour \`response\` field must directly answer this question.`;
     if (state.documentId) {
       preamble += `\nThey are viewing document ID: ${state.documentId} (type: ${state.documentType ?? 'unknown'}).`;
     }
@@ -309,9 +331,10 @@ function buildUserPrompt(state: GraphStateType): string {
 
 ## On-demand constraints
 
+- Your \`response\` field is the primary output. Answer the user's question conversationally.
 - Focus ONLY on data relevant to the user's question. The data below is already scoped to what they're viewing.
-- If the question is not about project data (e.g., greetings, off-topic), return an empty findings array.
-- Do NOT produce a dump of all issues as findings. Only flag genuine problems relevant to the user's context.
+- If the question is not about project data (e.g., greetings, off-topic), write a polite deflection in \`response\` and return an empty findings array.
+- Do NOT produce a dump of all issues as findings. Only include findings that support your answer.
 - If the user asks about a specific entity, findings should relate to that entity and its immediate neighbors (same sprint, same project).
 - Prefer fewer, higher-quality findings over comprehensive coverage.`;
   } else if (state.mode === 'proactive' && state.scanType) {
@@ -341,9 +364,14 @@ function hasData(state: GraphStateType): boolean {
 export async function reasoningNode(
   state: GraphStateType,
 ): Promise<Partial<GraphUpdateType>> {
+  const isOnDemand = state.mode === 'on_demand';
+
   if (!hasData(state)) {
     console.log('[reasoning] no data fetched — skipping LLM call');
-    return { findings: [] };
+    return {
+      findings: [],
+      ...(isOnDemand && { response: 'I couldn\'t fetch any project data to analyze. Ship API may be unavailable — try again in a moment.' }),
+    };
   }
 
   const config = loadConfig();
@@ -357,7 +385,8 @@ export async function reasoningNode(
     apiKey: config.openaiApiKey,
   });
 
-  const structured = llm.withStructuredOutput(FindingSchema, {
+  const schema = isOnDemand ? OnDemandSchema : FindingSchema;
+  const structured = llm.withStructuredOutput(schema, {
     name: 'analyze_workspace',
   });
 
@@ -366,15 +395,24 @@ export async function reasoningNode(
 
   try {
     const result = await structured.invoke([
-      { role: 'system', content: getSystemPrompt(state.scanType) },
+      { role: 'system', content: getSystemPrompt(state.scanType, isOnDemand) },
       { role: 'user', content: buildUserPrompt(state) },
     ]);
 
     console.log(`[reasoning] produced ${result.findings.length} findings`);
-    return { findings: result.findings };
+
+    const update: Partial<GraphUpdateType> = { findings: result.findings };
+    if ('response' in result && typeof result.response === 'string') {
+      update.response = result.response;
+    }
+    return update;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[reasoning] LLM call failed: ${message}`);
-    return { findings: [], fetchErrors: { reasoning: message } };
+    return {
+      findings: [],
+      fetchErrors: { reasoning: message },
+      ...(isOnDemand && { response: 'Something went wrong during analysis. Please try again.' }),
+    };
   }
 }

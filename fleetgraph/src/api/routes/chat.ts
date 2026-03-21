@@ -40,6 +40,7 @@ export function createChatRouter(graph: { invoke: (input: Record<string, unknown
         classification: result.classification,
         findings: result.findings,
         findingDocIds: result.findingDocIds,
+        response: result.response ?? null,
       });
     } catch (err) {
       console.error('[chat] graph invocation failed:', err);

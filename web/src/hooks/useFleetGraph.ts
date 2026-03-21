@@ -23,6 +23,7 @@ interface ChatResponse {
   classification: string;
   findings: Finding[];
   findingDocIds: string[];
+  response: string | null;
 }
 
 interface DecideRequest {

@@ -61,7 +61,7 @@ export function ChatPanel({ documentId, documentType }: ChatPanelProps) {
 
       const assistantMessage: Message = {
         role: 'assistant',
-        content: result.classification || 'Analysis complete.',
+        content: result.response || 'Analysis complete.',
         findings: result.findings,
         findingDocIds: result.findingDocIds,
       };

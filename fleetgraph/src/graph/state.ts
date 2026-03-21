@@ -149,6 +149,12 @@ export const GraphState = Annotation.Root({
     default: () => null,
   }),
 
+  // On-demand response (conversational answer to user's question)
+  response: Annotation<string | null>({
+    reducer: (_prev, next) => next,
+    default: () => null,
+  }),
+
   // Persist
   findingDocIds: Annotation<string[]>({
     reducer: (_prev, next) => next,
