@@ -120,7 +120,7 @@ export async function updateExistingFinding(
   existing: ShipDocument,
   finding: Finding,
   logPrefix: string,
-  enrichment?: { affected_entity_name?: string; summary?: string },
+  enrichment?: { affected_entity_name?: string; summary?: string; resolution_links?: Array<{ label: string; path: string }> },
 ): Promise<boolean> {
   const props = existing.properties as FindingProps;
   const existingSeverity = props.severity ?? 'info';
@@ -128,7 +128,7 @@ export async function updateExistingFinding(
   const titleChanged = existing.title !== finding.title;
   const severityUpgrade =
     (SEVERITY_RANK[finding.severity] ?? 0) > (SEVERITY_RANK[existingSeverity] ?? 0);
-  const hasEnrichment = enrichment?.affected_entity_name || enrichment?.summary;
+  const hasEnrichment = enrichment?.affected_entity_name || enrichment?.summary || enrichment?.resolution_links;
 
   const patch: Record<string, unknown> = {};
   if (titleChanged) patch.title = finding.title;
@@ -152,6 +152,9 @@ export async function updateExistingFinding(
   }
   if (enrichment?.summary) {
     propsUpdate.summary = enrichment.summary;
+  }
+  if (enrichment?.resolution_links) {
+    propsUpdate.resolution_links = enrichment.resolution_links;
   }
   if (propsChanged) {
     patch.properties = propsUpdate;

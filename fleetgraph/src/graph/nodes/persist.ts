@@ -74,6 +74,68 @@ function disambiguateTitle(finding: Finding, state: GraphStateType): string {
   return `${finding.title} (${programName})`;
 }
 
+interface ResolutionLink {
+  label: string;
+  path: string;
+}
+
+/**
+ * Build deterministic resolution links from finding type + graph state.
+ * These tell the user exactly where to go to fix the problem — no LLM involved.
+ */
+function buildResolutionLinks(finding: Finding, state: GraphStateType): ResolutionLink[] {
+  const links: ResolutionLink[] = [];
+  const id = finding.affectedEntityId;
+
+  switch (finding.findingType) {
+    case 'accountability_debt': {
+      if (finding.affectedEntityType !== 'sprint') break;
+      const sprint = state.sprints.find((s) => s.id === id);
+      if (!sprint) break;
+      if (!sprint.has_plan) {
+        links.push({ label: 'Create sprint plan', path: `/documents/${id}/plan` });
+      }
+      if (!sprint.has_retro) {
+        links.push({ label: 'Write retrospective', path: `/documents/${id}/review` });
+      }
+      break;
+    }
+    case 'blocked_chain': {
+      // Find the blocker issue from the dependency chain
+      for (const node of state.dependencyChain) {
+        if (node.id === id) continue; // skip the affected issue itself
+        if (node.state !== 'in_progress' && node.state !== 'in_review' && node.state !== 'done') {
+          links.push({
+            label: `View blocker: ${node.title}`,
+            path: `/documents/${node.id}`,
+          });
+        }
+      }
+      break;
+    }
+    case 'overloaded_member': {
+      if (finding.affectedEntityType === 'person') {
+        links.push({ label: 'View workload', path: `/team/${id}/issues` });
+      }
+      break;
+    }
+    case 'scope_creep': {
+      if (finding.affectedEntityType === 'sprint') {
+        links.push({ label: 'View sprint issues', path: `/documents/${id}/issues` });
+      }
+      break;
+    }
+    case 'stale_triage': {
+      if (finding.affectedEntityType === 'sprint') {
+        links.push({ label: 'View sprint issues', path: `/documents/${id}/issues` });
+      }
+      break;
+    }
+  }
+
+  return links;
+}
+
 function buildTipTapContent(reasoning: string): Record<string, unknown> {
   return {
     type: 'doc',
@@ -170,12 +232,15 @@ export async function persistNode(
         await updateExistingFinding(client, existing, titleFinding, '[persist]', {
           affected_entity_name: resolveEntityName(finding, state),
           summary: finding.summary,
+          resolution_links: buildResolutionLinks(finding, state),
         });
         skippedCount++;
         findingDocIds.push(existing.id);
         continue;
       }
     }
+
+    const resolutionLinks = buildResolutionLinks(finding, state);
 
     const properties: Record<string, unknown> = {
       finding_type: finding.findingType,
@@ -188,6 +253,7 @@ export async function persistNode(
       proposed_action: proposedAction,
       human_decision: state.humanDecision ?? null,
       recipient_ids: finding.recipientIds,
+      resolution_links: resolutionLinks,
       reasoning_model: 'gpt-4o',
       token_usage: { input: 0, output: 0 },
       trace_url: state.traceUrl ?? null,

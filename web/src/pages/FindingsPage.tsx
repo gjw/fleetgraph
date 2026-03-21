@@ -156,8 +156,25 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
         <p className="text-xs text-muted mt-1">{props.summary}</p>
       )}
 
-      {/* Affected entity link */}
-      {props?.affected_entity_id && (
+      {/* Resolution links or fallback entity link */}
+      {props?.resolution_links && props.resolution_links.length > 0 ? (
+        <div className="flex flex-col gap-1 text-xs">
+          <span className="text-muted">
+            Affects: {props.affected_entity_name ?? `${props.affected_entity_type} ${props.affected_entity_id?.slice(0, 8)}...`}
+          </span>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {props.resolution_links.map((link, i) => (
+              <Link
+                key={i}
+                to={link.path}
+                className="text-accent hover:underline"
+              >
+                {link.label} &rarr;
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : props?.affected_entity_id ? (
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-muted">Affects:</span>
           <Link
@@ -167,7 +184,7 @@ function FindingCard({ finding }: { finding: FindingDocument }) {
             {props.affected_entity_name ?? `${props.affected_entity_type} ${props.affected_entity_id.slice(0, 8)}...`}
           </Link>
         </div>
-      )}
+      ) : null}
 
       {/* Proposed action */}
       {hasActionableProposal && (

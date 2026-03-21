@@ -22,6 +22,7 @@ export interface FindingDocument {
     human_decision: 'confirmed' | 'acknowledged' | 'snoozed' | null;
     snooze_until: string | null;
     recipient_ids?: string[];
+    resolution_links?: { label: string; path: string }[];
     resolved_reason?: 'auto' | null;
     last_validated_at?: string | null;
     reasoning_model: string;
