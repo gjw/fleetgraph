@@ -38,7 +38,10 @@ function resolveEntityName(finding: Finding, state: GraphStateType): string {
     }
     case 'sprint': {
       const sprint = state.sprints.find((s) => s.id === id);
-      return sprint?.name ?? id;
+      if (!sprint) return id;
+      const programName = sprint.program_name
+        ?? state.programs.find((p) => p.id === sprint.program_id)?.name;
+      return programName ? `${sprint.name} (${programName})` : sprint.name;
     }
     case 'project': {
       const project = state.projects.find((p) => p.id === id);
@@ -66,6 +69,20 @@ function buildTipTapContent(reasoning: string): Record<string, unknown> {
       },
     ],
   };
+}
+
+/**
+ * Append program name to finding title when the affected entity is a sprint,
+ * so findings for "Week 14" across different programs are distinguishable.
+ */
+function disambiguateTitle(finding: Finding, state: GraphStateType): string {
+  if (finding.affectedEntityType !== 'sprint') return finding.title;
+  const sprint = state.sprints.find((s) => s.id === finding.affectedEntityId);
+  if (!sprint) return finding.title;
+  const programName = sprint.program_name
+    ?? state.programs.find((p) => p.id === sprint.program_id)?.name;
+  if (!programName || finding.title.includes(programName)) return finding.title;
+  return `${finding.title} (${programName})`;
 }
 
 async function resolveAssociation(
@@ -121,6 +138,8 @@ export async function humanGateNode(
     // Resolve person user UUIDs → person document UUIDs
     resolvePersonEntityId(finding, state.team);
 
+    const displayTitle = disambiguateTitle(finding, state);
+
     // Dedup check: does a finding with this type + entity already exist?
     const dedupKey = `${finding.findingType}::${finding.affectedEntityId}`;
     const existing = existingFindings.get(dedupKey);
@@ -130,7 +149,9 @@ export async function humanGateNode(
         console.log(
           `[human-gate] dedup hit: ${dedupKey} — updating in place`,
         );
-        await updateExistingFinding(client, existing, finding, '[human-gate]', {
+        // Use disambiguated title for dedup update
+        const titleFinding = { ...finding, title: displayTitle };
+        await updateExistingFinding(client, existing, titleFinding, '[human-gate]', {
           affected_entity_name: resolveEntityName(finding, state),
           summary: finding.summary,
         });
@@ -159,7 +180,7 @@ export async function humanGateNode(
     const belongsTo = await resolveAssociation(client, finding);
 
     const result = await client.createDocument({
-      title: finding.title,
+      title: disambiguateTitle(finding, state),
       document_type: 'fleetgraph_finding',
       properties,
       content: buildTipTapContent(finding.reasoning),

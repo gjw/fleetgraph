@@ -149,6 +149,8 @@ function buildUserPrompt(state: GraphStateType): string {
       state.sprints.map((s) => ({
         id: s.id,
         name: s.name,
+        program_id: s.program_id,
+        program_name: s.program_name,
         sprint_number: s.sprint_number,
         status: s.status,
         owner: s.owner,
