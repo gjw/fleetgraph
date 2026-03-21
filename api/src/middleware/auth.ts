@@ -22,7 +22,7 @@ function hashToken(token: string): string {
 }
 
 // Validate API token and return user info if valid
-async function validateApiToken(token: string): Promise<{
+export async function validateApiToken(token: string): Promise<{
   userId: string;
   workspaceId: string;
   isSuperAdmin: boolean;

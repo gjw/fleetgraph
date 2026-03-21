@@ -11,6 +11,7 @@ interface FleetGraphConfig {
   langsmithProject: string;
   langsmithTracing: boolean;
   shipApiUrl: string;
+  shipWsUrl: string;
   shipApiToken: string;
   port: number;
 }
@@ -35,6 +36,8 @@ export function loadConfig(): FleetGraphConfig {
     langsmithProject: process.env['LANGSMITH_PROJECT'] ?? 'fleetgraph',
     langsmithTracing: process.env['LANGSMITH_TRACING'] !== 'false',
     shipApiUrl: process.env['SHIP_API_URL'] ?? 'http://localhost:3000',
+    shipWsUrl: process.env['SHIP_WS_URL'] ??
+      (process.env['SHIP_API_URL'] ?? 'http://localhost:3000').replace(/^http/, 'ws'),
     shipApiToken: required('SHIP_API_TOKEN'),
     port: parseInt(process.env['FLEETGRAPH_PORT'] ?? '3100', 10),
   };

@@ -228,6 +228,9 @@ importers:
       openai:
         specifier: ^4.80.0
         version: 4.104.0(ws@8.19.0)(zod@3.25.76)
+      ws:
+        specifier: ^8.19.0
+        version: 8.19.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -238,6 +241,9 @@ importers:
       '@types/node':
         specifier: ^22.19.3
         version: 22.19.5
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       tsx:
         specifier: ^4.19.2
         version: 4.21.0

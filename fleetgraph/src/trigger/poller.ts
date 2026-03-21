@@ -11,6 +11,9 @@ type GraphLike = {
   invoke: (input: Record<string, unknown>) => Promise<Record<string, unknown>>;
 };
 
+let graphRef: GraphLike | null = null;
+let hotIntervalHandle: ReturnType<typeof setInterval> | null = null;
+
 /**
  * Wait for Ship API to be reachable before starting polls.
  */
@@ -62,18 +65,30 @@ async function runCadence(
 }
 
 /**
+ * Reset the hot-loop poll timer. Called after a WebSocket-triggered scan
+ * to avoid a redundant poll at the old interval.
+ */
+export function resetHotTimer(): void {
+  if (!hotIntervalHandle || !graphRef) return;
+  clearInterval(hotIntervalHandle);
+  hotIntervalHandle = setInterval(() => runCadence(graphRef!, 'hot'), HOT_INTERVAL_MS);
+  console.log('[poller:hot] timer reset after WS-triggered scan');
+}
+
+/**
  * Starts all three proactive pollers: hot (5min), daily (24h), weekly (7d).
  * Waits for Ship API to be ready, then staggers first runs to avoid
  * concurrent initial invocations.
  */
 export function startPollers(graph: GraphLike): void {
+  graphRef = graph;
   console.log('[poller] will start cadenced polls after Ship API is ready');
 
   waitForShip().then(() => {
     // Hot: every 5 minutes, starts immediately
     console.log(`[poller:hot] starting — interval=${HOT_INTERVAL_MS / 1000}s`);
     runCadence(graph, 'hot');
-    setInterval(() => runCadence(graph, 'hot'), HOT_INTERVAL_MS);
+    hotIntervalHandle = setInterval(() => runCadence(graph, 'hot'), HOT_INTERVAL_MS);
 
     // Daily: every 24 hours, staggered 30s after hot
     // NOTE: setInterval drifts on restart — acceptable for MVP since CLI covers demo

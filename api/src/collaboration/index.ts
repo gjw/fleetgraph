@@ -9,6 +9,7 @@ import { pool } from '../db/client.js';
 import { extractHypothesisFromContent, extractSuccessCriteriaFromContent, extractVisionFromContent, extractGoalsFromContent } from '../utils/extractHypothesis.js';
 import { yjsToJson, jsonToYjs } from '../utils/yjsConverter.js';
 import { SESSION_TIMEOUT_MS, ABSOLUTE_SESSION_TIMEOUT_MS } from '@ship/shared';
+import { validateApiToken } from '../middleware/auth.js';
 import cookie from 'cookie';
 
 const messageSync = 0;
@@ -92,7 +93,7 @@ const conns = new Map<WebSocket, { docName: string; awarenessClientId: number; u
 
 // Global events connections (separate from document collaboration)
 // These persist across navigation and are used for real-time notifications
-const eventConns = new Map<WebSocket, { userId: string; workspaceId: string }>();
+const eventConns = new Map<WebSocket, { userId: string; workspaceId: string; isService: boolean }>();
 
 // Debounce persistence (save every 2 seconds after changes)
 const pendingSaves = new Map<string, NodeJS.Timeout>();
@@ -601,6 +602,14 @@ export function broadcastToUser(userId: string, eventType: string, data?: Record
     }
   });
 
+  // Fan out to service listeners (e.g. FleetGraph) so they hear all workspace events
+  eventConns.forEach((conn, ws) => {
+    if (conn.isService && ws.readyState === WebSocket.OPEN) {
+      ws.send(payload);
+      sentCount++;
+    }
+  });
+
   if (sentCount > 0) {
     console.log(`[Events] Broadcast '${eventType}' to user ${userId} (${sentCount} connections)`);
   }
@@ -630,8 +639,27 @@ export function setupCollaboration(server: Server) {
       }
       recordConnectionAttempt(clientIp);
 
-      // Validate session
-      const sessionData = await validateWebSocketSession(request);
+      // Validate auth: try Bearer token first (service accounts), then session cookie
+      let sessionData: { userId: string; workspaceId: string; isService: boolean } | null = null;
+
+      const authHeader = request.headers['authorization'];
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.slice(7);
+        const tokenData = await validateApiToken(token);
+        if (tokenData) {
+          sessionData = { userId: tokenData.userId, workspaceId: tokenData.workspaceId, isService: true };
+        } else {
+          socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+      } else {
+        const cookieSession = await validateWebSocketSession(request);
+        if (cookieSession) {
+          sessionData = { ...cookieSession, isService: false };
+        }
+      }
+
       if (!sessionData) {
         socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
         socket.destroy();
@@ -798,9 +826,10 @@ export function setupCollaboration(server: Server) {
   });
 
   // Handle events WebSocket connections (for real-time notifications)
-  eventsWss.on('connection', (ws: WebSocket, sessionData: { userId: string; workspaceId: string }) => {
-    eventConns.set(ws, { userId: sessionData.userId, workspaceId: sessionData.workspaceId });
-    console.log(`[Events] User ${sessionData.userId} connected (${eventConns.size} total connections)`);
+  eventsWss.on('connection', (ws: WebSocket, sessionData: { userId: string; workspaceId: string; isService: boolean }) => {
+    eventConns.set(ws, { userId: sessionData.userId, workspaceId: sessionData.workspaceId, isService: sessionData.isService });
+    const label = sessionData.isService ? 'service' : 'user';
+    console.log(`[Events] ${label} ${sessionData.userId} connected (${eventConns.size} total connections)`);
 
     // Send initial connected message
     ws.send(JSON.stringify({ type: 'connected', data: {} }));
