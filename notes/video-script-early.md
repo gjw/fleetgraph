@@ -44,8 +44,31 @@ seeded project data. Here's what it found."
 - Read a finding title and its summary line
 - "Each finding is rolled up — one finding per condition, not one per issue.
   'Stale triage backlog' is one finding covering 6 issues, not 6 separate alerts."
-- Click into the affected entity link — show it navigates to the right
-  sprint/person/program page
+
+**Best finding to demo click-through: "Stale triage issues"**
+- Click the entity link → goes to the FleetGraph Demo program page
+- **Then click the Issues sub-tab**, and select the "Needs Triage" filter/status
+  to show the actual stale issues. Narrate: "These are the 6 issues the agent
+  flagged — sitting in triage for 5+ days."
+- (NOTE: the entity link currently goes to /documents/{programId}, not directly
+  to the issues tab. For the final video, we should link to /documents/{id}/issues
+  or directly to the triage filter. For now, navigate manually.)
+
+**Findings to SKIP in the demo:**
+- "Week 14 is missing a sprint plan and retrospective" — skip this, the
+  resolution path isn't clear enough to demo confidently yet
+- "Week 12 is missing a sprint plan and retrospective" — skip, historical
+  debt on a completed sprint, less interesting than active findings
+- If both appear, just don't dwell on them. Scroll past.
+
+**"David Kim is overloaded":**
+- Can click through to David Kim's person page, which shows the Week History
+  chart with his hours. That's useful context.
+- BUT: there's no "issues assigned to David Kim" view anywhere in Ship.
+  For the demo, narrate: "FleetGraph surfaces that David Kim has 29 active
+  issues — we can see his workload distribution in the Week History chart."
+  Don't try to show a per-user issue list that doesn't exist.
+
 - Show the filter tabs (Active / Acknowledged / Snoozed / All)
 
 **Capture:** Note how many findings, which types. This is your TC-1 data.
@@ -96,14 +119,23 @@ about what matters most."
 
 ### 5. On-Demand Chat — Scoped Analysis (45-60s)
 
-**Navigate to:** A Week 14 sprint page or the FleetGraph Demo program page
+**Navigate to:** A Week 14 sprint page (NOT the program page — scoping is
+tighter on a sprint and the question makes more sense here)
 
-**Ask:** "How is this sprint going?" or "What risks do you see here?"
+**Ask:** "What should I work on next?"
 
 **When response arrives:**
-- "The response is scoped to what I'm looking at — it analyzed this sprint's
-  issues, not the entire workspace."
-- Point out any specific insights (scope creep, blocked issues, velocity)
+- "The chat is scoped to what I'm looking at. Because I'm on a sprint page,
+  it fetched issues in this sprint and analyzed them for the current user."
+- Point out prioritization, blockers, due dates if mentioned
+- If the response is generic/dump-like, narrate: "The on-demand analysis
+  identifies what matters in this sprint's context"
+
+**NOTE to self:** The scoping works like this:
+- On a sprint page → fetches that sprint's issues
+- On a program page → fetches all program issues (too broad for this question)
+- On an issue page → fetches that issue + its sprint/project context
+- No document context → fetches user's assigned issues across workspace
 
 **Capture:** Trace URL. This is your TC-3 data.
 

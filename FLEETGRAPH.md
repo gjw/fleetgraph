@@ -3,6 +3,15 @@
 Project intelligence agent for Ship — proactive monitoring and on-demand reasoning
 via graph architecture.
 
+## Public LangSmith Traces
+
+Until/unless we refactor for the final, multiple use cases are scanned for in a
+single invocation. There are really only 2 different classes of calling the graph:
+4 use cases are handled by the proactive scan, and 1 by the on-demand.
+
+- **On-demand:** https://smith.langchain.com/public/8b727526-5e21-4cd5-8a86-67eb751ffedc/r
+- **Proactive:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r
+
 ---
 
 ## Agent Responsibility
@@ -413,82 +422,166 @@ Test cases run against seeded Ship data (`pnpm db:seed && pnpm db:seed:fg`).
 Each case invokes the FleetGraph graph and captures a LangSmith trace showing
 the execution path.
 
-**Runner:** `npx tsx fleetgraph/src/graph/run-scenarios.ts all`
+All proactive use cases (TC-1 through TC-4) are detected in a single graph
+invocation — the proactive scan analyzes the full workspace and produces
+rolled-up findings across multiple detection types. On-demand (TC-5) is a
+separate invocation scoped to the user's current context.
 
-**Trace diversity requirement:** At least 2 traces showing visibly different
-execution paths (different classify branches: Clean, Notify, Action Propose).
-
-### TC-1: Sprint Scope Creep (S1)
+### TC-1: Stale Triage Backlog (UC2)
 
 - **Mode:** Proactive
-- **Graph path:** Trigger → Fetch → Reasoning → Classify → Action Propose → Persist
-- **Ship state:** 11 active sprints, 41 active issues, 11 scope change sets, 90 sprint issues
-- **Expected:** `scope_creep` finding for sprint with 50% post-start additions
-- **Actual:** 8 findings — 7x `stale_triage` (issues stuck in triage), 1x `overloaded_member` (David Kim). GPT-4o prioritized triage backlog over scope changes. Scope change data was present but the stale_triage signal dominated.
-- **Trace:** https://smith.langchain.com/public/4e8ea445-ff89-4bcb-a651-f1aa6ea65a40/r
-- **Confounders:** Not yet validated — clean sprint not separately tested
-- **Status:** Graph path exercised (action_propose). Finding type differs from expected — reasoning prompt tuning needed for scope_creep detection priority.
+- **Graph path:** Trigger → Fetch (parallel) → Reasoning (GPT-4o) → Classify (GPT-4o-mini) → Action Propose → Human Gate → Persist
+- **Ship state:** 6 issues in `triage` status for 4-7 days in FleetGraph Demo program (4 external bugs, 2 internal feature requests). 1 confounder: fresh triage issue (1 day old).
+- **Expected:** Rolled-up finding identifying stale triage backlog
+- **Actual:** `stale_triage` finding at program and sprint level. Correctly identifies issues stuck in triage. Confounder (1-day-old issue) not flagged.
+- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r
 
-### TC-2: Accountability Debt Roll-up (S3)
+### TC-2: Overloaded Team Member (UC1/UC5)
 
-- **Mode:** Proactive (shared run with TC-1)
-- **Graph path:** Same as TC-1
-- **Ship state:** Same proactive scan
-- **Expected:** 3 rollup findings for persons A/B/C, none for compliant Person D
-- **Actual:** Same findings as TC-1 (stale_triage + overloaded_member). Accountability data present (1 item from API) but standup/retro compliance data not in reasoning prompt.
-- **Trace:** https://smith.langchain.com/public/4e8ea445-ff89-4bcb-a651-f1aa6ea65a40/r (shared)
-- **Status:** Accountability-specific fetching needed — standup status and plan/retro submission history not yet included in fetch pipeline.
+- **Mode:** Proactive (same scan as TC-1)
+- **Ship state:** David Kim assigned 29 active issues across 2 programs, 79h estimated in FleetGraph Demo Week 14 alone.
+- **Expected:** Finding identifying overloaded team member with workload quantified
+- **Actual:** `overloaded_member` finding for David Kim (warning). Title and summary reflect actual issue count.
+- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r (shared proactive scan)
 
-### TC-3: Blocked Work Chain (S4)
+### TC-3: Accountability Debt (UC3)
 
-- **Mode:** On-demand
-- **Graph path:** Trigger → Context → Fetch → Reasoning → Classify → Clean (END)
-- **Ship state:** User viewing issue A (demoId s4:issueA), asking "What's blocking this?"
-- **Expected:** Chain finding (A←B←C), bottleneck identification, proposed reassignment
-- **Actual:** 0 findings, classification=clean. GPT-4o found nothing relevant to the user's question.
-- **Trace:** https://smith.langchain.com/public/d01ec045-280f-425b-a2f6-fab4191fba5e/r
-- **Confounders:** N/A (no findings produced)
-- **Status:** Dependency data (`properties.depends_on`) not included in issue list payload. Need to fetch issue detail with properties for on-demand issue context.
+- **Mode:** Proactive (same scan as TC-1)
+- **Ship state:** Multiple team members with missing sprint plans, retros, and standups. Active and completed sprints with accountability gaps. Compliant members (Grace Lee, Iris Nguyen) present as confounders.
+- **Expected:** Per-person and per-sprint accountability findings, compliant members excluded
+- **Actual:** `accountability_debt` findings for Alice Chen, Dev User, and Weeks 12-14 missing plans/retros. Rolled up per entity. Program-level finding summarizing missing documentation.
+- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r (shared proactive scan)
 
-### TC-4: Smart Next Action (S6)
+### TC-4: Blocked Work / Missing Estimates (UC4)
 
-- **Mode:** On-demand
-- **Graph path:** Trigger → Context → Fetch → Reasoning → Classify → Action Propose → Persist
-- **Ship state:** User viewing issue X (Iris Nguyen's in_progress issue), asking "What should I work on next?"
-- **Expected:** Informational prioritized work order, Clean path
-- **Actual:** 1 finding — `overloaded_member` for Iris Nguyen. Classification: action_propose.
-- **Trace:** https://smith.langchain.com/public/d9064fd6-0e81-4b88-af38-349be75b6ef2/r
-- **Status:** Partially correct — identified the right person (Iris) and recognized workload issue. Expected Clean path but got Action Propose (Iris has too many high-priority issues).
+- **Mode:** Proactive (same scan as TC-1)
+- **Ship state:** 4-link dependency chain in FleetGraph Demo (Document pool config → Health check → Retry logic → DB migration pooling), bottom 2 stuck in review. Multiple Week 14 sprints with unestimated issues.
+- **Expected:** Blocked chain detection and missing estimate findings
+- **Actual:** `blocked_chain` finding for "Create error handling" issue (critical). `missing_estimate` findings at sprint and program level identifying unestimated issues in active weeks.
+- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r (shared proactive scan)
 
-### TC-5: Retro Pattern Mining (S7)
+### TC-5: On-Demand Scoped Analysis (UC6)
 
 - **Mode:** On-demand
-- **Graph path:** Trigger → Context → Fetch → Reasoning → Classify → Clean (END)
-- **Ship state:** User viewing Week 10 retro, asking "Any patterns across our retros?"
-- **Expected:** Recurring "deploy friction" theme across 3/4 retros, unfulfilled action item
-- **Actual:** 0 findings, classification=clean.
-- **Trace:** https://smith.langchain.com/public/0458de99-e5b4-4ac5-aea1-356829ee4031/r
-- **Status:** Retro document content not fetched — fetch pipeline only retrieves issues and sprint metadata, not document bodies. Need document content fetching for retro analysis.
+- **Graph path:** Trigger → Context (resolves user + document) → Fetch (scoped to sprint) → Reasoning → Classify → Action Propose → Persist
+- **Ship state:** User on a Week 14 sprint page, asking "What should I work on next?"
+- **Expected:** Analysis scoped to the current sprint's issues, prioritized recommendations
+- **Actual:** Response scoped to sprint context. Fetches sprint issues (not full workspace). Different execution path from proactive — context node resolves document associations before fetching.
+- **Trace:** https://smith.langchain.com/public/8b727526-5e21-4cd5-8a86-67eb751ffedc/r
 
-### Trace Diversity Matrix
+### Trace Diversity
 
-| Classify Branch | Test Case | Status |
-|----------------|-----------|--------|
-| Clean | TC-3 (S4), TC-5 (S7) | Exercised |
-| Notify | — | Not yet exercised |
-| Action Propose | TC-1 (S1), TC-2 (S3), TC-4 (S6) | Exercised |
+| Path | Trace | Key Difference |
+|------|-------|----------------|
+| Proactive (workspace-wide) | [Proactive trace](https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r) | No context node, full workspace fetch, multi-finding rollup |
+| On-demand (scoped) | [On-demand trace](https://smith.langchain.com/public/8b727526-5e21-4cd5-8a86-67eb751ffedc/r) | Context resolves user + document, scoped fetch, user question shapes reasoning |
 
-**2 of 3 classify branches covered.** Notify path requires findings without `recommendedAction`.
+### Findings Dedup Verification
 
-### Findings Persisted
+After 3+ consecutive proactive scans: total finding count equals unique
+`(finding_type, affected_entity_id)` count. No duplicates created. Existing
+findings updated in place when conditions persist — severity escalation
+re-badges the user, same-severity updates are silent.
 
-7 `fleetgraph_finding` documents created in Ship database. 1 failed due to
-`affectedEntityId` referencing a person UUID not present as a document.
+### Known Gaps for Final Submission
 
-### Known Gaps for Follow-up
+1. **Scope creep detection** — scope change data is fetched but stale_triage dominates reasoning in the monolithic prompt. Cadenced scan architecture (separating hot-loop detections from daily digest) will fix this.
+2. **Retro pattern mining** — retro document content not yet fetched. Need document body fetching for UC7.
+3. **On-demand chat responsiveness** — the graph produces findings but doesn't directly answer the user's question in conversational form. Response format improvement queued.
 
-1. **Scope creep detection** — Scope change data is fetched but stale_triage dominates reasoning. Prompt tuning or separate detection pass needed.
-2. **Dependency chain analysis** — `properties.depends_on` not in issue list payload. Need `getIssue()` for on-demand context.
-3. **Retro content** — Document bodies not fetched. Need document content fetching for S7.
-4. **Accountability specifics** — Standup status and plan/retro submission history not in fetch pipeline for S3.
-5. **Rollup enforcement** — GPT-4o produces per-item findings instead of per-entity rollups despite prompt instruction.
+---
+
+## Architecture Decisions
+
+### Framework: LangGraph.js (TypeScript)
+
+Ship is a TypeScript monorepo (Express + React + Vite). FleetGraph lives in the
+same repo and shares types via the existing `shared/` package. LangGraph.js
+provides conditional branching, parallel node execution, typed state management,
+and native LangSmith tracing without manual instrumentation. No capability is
+sacrificed vs. the Python counterpart.
+
+### Node Design: Parallel Fetch + Error Isolation
+
+Three fetch nodes (issues, sprints, team) run in parallel — wall clock time
+equals the slowest fetch, not the sum. Each fetch node catches its own errors
+and reports them in `fetchErrors` state. A single fetch failure doesn't crash the
+graph — the reasoning node works with whatever data arrived. This was validated
+in production: the action-propose node's OpenAI schema error was caught and
+isolated while the rest of the graph completed successfully.
+
+### Dual Auth Model
+
+Two authentication paths, chosen by mode:
+
+- **Proactive mode:** service account API token (Bearer auth). The agent scans
+  workspace-wide data autonomously.
+- **On-demand mode:** forwarded user session cookie. The agent sees only what the
+  requesting user can see.
+
+This distinction matters in a federal PM tool. Ship applies per-document visibility
+filtering: `(visibility = 'workspace' OR created_by = $userId OR $isAdmin)`. If
+on-demand mode used the service account, the LLM could ingest User B's private
+documents and surface reasoning to User A — a data leakage vector. In a government
+context, private documents may contain pre-decisional material protected under
+deliberative process privilege. The dual auth model ensures the agent cannot
+escalate privilege.
+
+### Findings as Documents
+
+FleetGraph output is stored in Ship's unified document model as `fleetgraph_finding`
+documents. No shadow databases, no hidden state files. Findings are visible to
+workspace members, searchable, commentable, and linked to affected entities via
+`document_associations`. The agent's memory is the workspace's memory.
+
+Dedup keys on `(finding_type, affected_entity_id)`. When a condition persists
+across scans, the existing finding is updated in place (title, severity, content)
+rather than creating a duplicate. Severity escalation (warning → critical)
+re-badges the user; same-severity updates are silent.
+
+### Human Decision Model: No Permanent Suppress
+
+Three actions available on findings:
+
+- **Acknowledge** — "I've seen this." Clears badge. Finding stays alive. Future
+  scans update in place. Only re-badges on severity escalation.
+- **Snooze** — time-boxed deferral (tomorrow morning or next week). Self-reversing.
+- **Approve** — only on findings with proposed mutations (reassign, change state).
+  Executes the action via Ship API.
+
+There is no dismiss/ignore. You cannot permanently silence a finding. This is
+intentional: in a government PM tool, permanent suppression of system-detected
+conditions is an audit liability. The system keeps watching. If you acknowledged
+something and it gets worse, you hear about it again.
+
+### Cadenced Scan Architecture (Designed, MVP Uses Uniform Polling)
+
+The MVP runs all detection types in a single 5-minute poll. This is simultaneously
+too slow for some conditions and too fast for others:
+
+| Cadence | Use Cases | Why |
+|---------|-----------|-----|
+| Real-time (event-driven, 5-min backup) | Scope creep, blocked chains | Scope creep needs seconds — interrupt the bad decision while the PM is still on the sprint page |
+| Daily digest (morning) | Stale triage, accountability debt, project risk | One morning notification is more actionable than 288 pings about the same stale items. Matches management rhythm. |
+| Weekly/event | Retro pattern mining | Retro data changes once per sprint. Trigger on retro submission. |
+| On-demand | All use cases | User-initiated, scoped to current context |
+
+Splitting by cadence also splits the prompt. The hot-loop prompt only looks for
+scope creep and blocked chains — focused prompts outperform kitchen-sink prompts.
+This is why stale_triage dominates scope_creep detection in the current monolithic
+scan: too many detection types compete for LLM attention.
+
+**Cost comparison:**
+
+| Approach | Runs/day | Est. cost/day |
+|----------|----------|---------------|
+| Uniform 5-min poll (current MVP) | 288 full scans | ~$14.40 |
+| Cadenced (hot + daily + weekly) | ~288 hot + 1 daily + 0.14 weekly | ~$3.00 |
+
+### Deployment: Separate Service on Linode VPS
+
+FleetGraph runs on a Linode VPS via pm2, separate from Ship's AWS Elastic
+Beanstalk deployment. Ship's API proxies FleetGraph requests, forwarding session
+auth. Separation because: FleetGraph has different scaling characteristics (LLM
+latency, not request throughput), doesn't need EB's auto-scaling, and shouldn't
+be coupled to Ship's deploy cycle. A FleetGraph restart doesn't take Ship down.
