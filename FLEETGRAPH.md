@@ -217,8 +217,9 @@ trigger, not the graph.
                          │      ┌──────▼──────┐
                          │      │   HUMAN     │
                          │      │   GATE      │
-                         │      │ (confirm/   │
-                         │      │  dismiss)   │
+                         │      │ (acknowledge│
+                         │      │  snooze/    │
+                         │      │  approve)   │
                          │      └──────┬──────┘
                          │             │
                          │      ┌──────▼──────┐
@@ -250,7 +251,7 @@ trigger, not the graph.
 | **Clean** | Terminal | No problems found. Proactive: silent. On-demand: "Everything looks healthy, here's why." | -- |
 | **Notify** | Action | Persists informational finding, surfaces it in UI. No human gate needed. | -- |
 | **Action Propose** | Action | Proposes a concrete Ship mutation (reassign, change state, escalate). Requires human approval. | -- |
-| **Human Gate** | HITL | Pauses graph execution. Presents proposed action with context. Waits for confirm/dismiss/snooze via `/findings/:id/decide` endpoint. | -- |
+| **Human Gate** | HITL | Pauses graph execution. Presents proposed action with context. Waits for acknowledge/snooze/approve via `/findings/:id/decide` endpoint. | -- |
 | **Execute Action** | Action | Carries out the approved action via Ship API (PATCH issue, POST comment). | -- |
 | **Persist** | Output | Saves finding document to Ship + creates entity association + updates FleetGraph config state. | -- |
 
@@ -262,7 +263,7 @@ trigger, not the graph.
 | Classify -> Notify | Finding detected, informational only (health score, trend, pattern) |
 | Classify -> Action Propose | Finding includes a concrete recommended action that would modify Ship state |
 | Human Gate -> Execute | User confirms proposed action |
-| Human Gate -> Persist | User dismisses or snoozes — skip execution, still record the finding |
+| Human Gate -> Persist | User acknowledges or snoozes — skip execution, still record the finding |
 
 ### Parallel Execution
 
@@ -271,48 +272,79 @@ Reasoning node waits for all three to complete before executing.
 
 ### State Shape
 
-```
+Matches `fleetgraph/src/graph/state.ts` — LangGraph `Annotation.Root`, all camelCase.
+
+```typescript
 {
+  // Trigger
   mode: "proactive" | "on_demand",
-  trigger_event: { type, data, timestamp },
+  scanType: "hot" | "daily" | "weekly" | null,  // cadence tier
+  triggerId: string,
 
-  // Context
-  user_id: string | null,          // null for proactive
-  document_id: string | null,      // null for proactive
-  document_type: string | null,
-  scope: "workspace" | "program" | "project" | "sprint" | "issue",
+  // Context (on-demand fields null for proactive)
+  userId: string | null,
+  documentId: string | null,
+  documentType: string | null,
+  userMessage: string | null,        // on-demand: user's chat message
+  sessionCookie: string | null,      // on-demand: forwarded session for auth
 
-  // Fetched data (populated by fetch nodes)
-  issues: Issue[],
-  sprints: Sprint[],
-  projects: Project[],
-  team_members: Person[],
-  accountability_items: ActionItem[],
+  // Context associations (resolved by context node for scoped fetching)
+  contextSprintId: string | null,
+  contextProjectId: string | null,
+  contextProgramId: string | null,
+
+  // Fetched data (populated by parallel fetch nodes)
+  issues: ShipIssue[],
+  sprints: ShipSprint[],
+  sprintIssues: ShipSprintIssue[],
+  scopeChanges: Array<{ sprintId, sprintName } & ShipScopeChanges>,
+  projects: ShipProject[],
+  programs: ShipProgram[],
+  team: ShipTeamGrid | null,
+  accountabilityItems: ShipAccountabilityItems | null,
+  retroContent: Array<{ sprintId, sprintName, text }>,
+  dependencyChain: Array<{ id, title, state, dependsOn }>,
+
+  // Fetch errors (additive reducer — each node appends its key)
+  fetchErrors: Record<string, string>,
 
   // Reasoning output
-  findings: Finding[],
-  proposed_actions: Action[],
+  findings: Finding[],               // structured findings from GPT-4o
+  classification: "clean" | "notify" | "action_propose",
 
-  // HITL
-  human_decision: "pending" | "confirmed" | "dismissed" | "snoozed" | null,
+  // Action (HITL path)
+  proposedAction: ProposedAction | null,   // singular, not array
+  humanDecision: "confirmed" | "dismissed" | "snoozed" | null,
+  executionResult: Record<string, unknown> | null,
 
-  // Chat history (on-demand only)
-  messages: Message[],
+  // On-demand response
+  response: string | null,           // conversational answer to user's question
+
+  // Persist output
+  findingDocIds: string[],           // IDs of created/updated finding documents
+  traceUrl: string | null,           // LangSmith trace link
 }
 ```
+
+Note: `human_decision` and `status` also exist as **finding document properties**
+(stored in Ship's JSONB), with values `acknowledged | snoozed | confirmed | null`
+and `active | pending_decision | acknowledged | snoozed | resolved` respectively.
+These are distinct from the graph state's `humanDecision` field.
 
 ### Error Handling and Graceful Degradation
 
 The graph handles failures at two levels: fetch failures (Ship API down or
 partially available) and LLM failures (OpenAI API down or rate-limited).
 
-**Fetch node failures:**
+**Fetch node failures (implemented):**
 
-- Each fetch node returns an error flag instead of crashing the graph
-- If all fetches fail: proactive mode silently retries next cycle; on-demand mode
-  tells the user "Ship API is unreachable, try again in a few minutes"
-- If some fetches fail: the Reasoning node receives partial data + error flags,
-  reasons on what it has, and flags reduced confidence in the finding
+- Each fetch node catches errors and writes to `fetchErrors` state (additive
+  reducer — `{ issues: "timeout", team: "401 Unauthorized" }`)
+- The graph continues with whatever data arrived. Reasoning receives partial
+  data and produces findings based on available information.
+- A single fetch failure doesn't crash the graph — this was validated in
+  production when the action-propose node's OpenAI schema error was caught
+  while the rest of the graph completed successfully.
 
 **Partial data degradation:**
 
@@ -322,18 +354,18 @@ partially available) and LLM failures (OpenAI API down or rate-limited).
 | Sprint data | Scope creep detection, sprint health | Issue lifecycle checks |
 | Issue data | Issue-specific findings | Sprint-level and project-level analysis |
 
-**LLM failures:**
+**LLM failures (implemented):**
 
-- Proactive mode skips the cycle entirely — no partial reasoning, no noise
-- On-demand mode returns: "I'm temporarily unable to analyze — here are the raw
-  data links so you can check manually"
+- Classify node defaults to `'clean'` on LLM error — proactive stays silent,
+  on-demand produces no findings
+- Reasoning node catches errors into `fetchErrors.reasoning`
 
-**Reconnection (WebSocket):**
+**Not yet implemented** (designed but deferred):
 
-- Exponential backoff on disconnect
-- Poll safety net catches events missed during reconnection gaps
-- No silent failure — if the WebSocket stays down, polling continues to trigger
-  graph runs
+- On-demand user-facing error message when all fetches fail ("Ship API is
+  unreachable, try again in a few minutes")
+- Reduced confidence flagging when reasoning on partial data
+- Raw data link fallback for on-demand LLM failures
 
 ### Data Model
 
@@ -554,29 +586,93 @@ intentional: in a government PM tool, permanent suppression of system-detected
 conditions is an audit liability. The system keeps watching. If you acknowledged
 something and it gets worse, you hear about it again.
 
-### Cadenced Scan Architecture (Designed, MVP Uses Uniform Polling)
+### Cadenced Scan Architecture
 
-The MVP runs all detection types in a single 5-minute poll. This is simultaneously
-too slow for some conditions and too fast for others:
+#### The problem with uniform polling
 
-| Cadence | Use Cases | Why |
-|---------|-----------|-----|
-| Real-time (event-driven, 5-min backup) | Scope creep, blocked chains | Scope creep needs seconds — interrupt the bad decision while the PM is still on the sprint page |
-| Daily digest (morning) | Stale triage, accountability debt, project risk | One morning notification is more actionable than 288 pings about the same stale items. Matches management rhythm. |
-| Weekly/event | Retro pattern mining | Retro data changes once per sprint. Trigger on retro submission. |
-| On-demand | All use cases | User-initiated, scoped to current context |
+The MVP runs all 7 detection types in a single 5-minute poll. This is
+simultaneously too slow for some conditions and too fast for others, and it
+forces GPT-4o to detect everything at once — reducing per-type accuracy.
 
-Splitting by cadence also splits the prompt. The hot-loop prompt only looks for
-scope creep and blocked chains — focused prompts outperform kitchen-sink prompts.
-This is why stale_triage dominates scope_creep detection in the current monolithic
-scan: too many detection types compete for LLM attention.
+Scope creep happens in real time (a PM adds issues to an active sprint), but
+the uniform poll won't catch it for up to 5 minutes. Stale triage, by contrast,
+is a slow-moving condition — the same issues have been stuck for days — yet the
+poll re-scans them 288 times/day, producing identical findings each time.
 
-**Cost comparison:**
+#### Cadence-to-use-case mapping
 
-| Approach | Runs/day | Est. cost/day |
-|----------|----------|---------------|
-| Uniform 5-min poll (current MVP) | 288 full scans | ~$14.40 |
-| Cadenced (hot + daily + weekly) | ~288 hot + 1 daily + 0.14 weekly | ~$3.00 |
+| Cadence | Use Cases | Why This Cadence | Prompt Strategy |
+|---------|-----------|------------------|-----------------|
+| Real-time/event (5-min backup) | UC1 Scope Creep, UC4 Blocked Chain | Scope creep needs seconds (interrupt the decision). Chains form over hours. | Focused: sprint assignments + state transitions only |
+| Daily digest (morning) | UC2 Stale Triage, UC3 Accountability, UC5 Risk | Triage staleness is time-based, not event-based. Accountability matches management rhythm. Risk changes weekly. | Full workspace scan, one comprehensive analysis |
+| Weekly/event | UC7 Retro Patterns | Retros written once/sprint. Trigger on retro submission. | Deep cross-document analysis, rare |
+| On-demand | UC4-7 | User-initiated, scoped to current context | Context-aware, instant |
+
+#### Why splitting improves detection quality
+
+The current kitchen-sink prompt asks GPT-4o to detect scope creep AND stale
+triage AND accountability AND blocked chains simultaneously. In practice,
+`stale_triage` dominates because it's the most obvious pattern — issues stuck
+for days are easy to spot, while scope creep requires comparing sprint start
+state to current state. Focused prompts eliminate this competition: the hot-loop
+prompt ONLY looks for scope creep and blocked chains, so the LLM's full
+attention is on time-sensitive conditions.
+
+This is validated by the `scanType` routing in `reasoning.ts`:
+
+- **hot**: `scope_creep`, `blocked_chain` only (uses GPT-4o-mini for speed)
+- **daily**: `stale_triage`, `accountability_debt`, `blocked_sprint`,
+  `overloaded_member`, `missing_estimate`, `sprint_velocity_drop`,
+  `unplanned_work` (uses GPT-4o for depth)
+- **weekly**: `retro_patterns` only (uses GPT-4o for cross-document analysis)
+
+Fetch nodes also vary by cadence — hot scans fetch only active sprints, daily
+scans fetch all sprints for accountability coverage, weekly scans pull retro
+document content.
+
+#### Cost analysis (before/after)
+
+| Approach | Runs/day | Cost/run | Est. cost/day |
+|----------|----------|----------|---------------|
+| Uniform 5-min poll (current MVP) | 288 full scans | ~$0.05 | ~$14.40 |
+| Hot loop (5-min, focused prompt) | ~288 | ~$0.01 | ~$2.88 |
+| Daily digest (1×/morning) | 1 | ~$0.05 | ~$0.05 |
+| Weekly/event (retro trigger) | ~0.14 | ~$0.03 | ~$0.004 |
+| **Cadenced total** | | | **~$2.93** |
+
+**79% reduction** with better responsiveness and detection quality.
+
+The hot-loop cost drops from $0.05 to $0.01 because the prompt is smaller
+(fewer detection types, less context to inject) and uses GPT-4o-mini instead
+of GPT-4o. The daily scan stays at $0.05 but runs once instead of 288 times.
+
+#### Responsiveness analysis
+
+More frequent is not always more responsive. For conditions that change slowly,
+high-frequency polling creates noise without adding value:
+
+| Condition | Uniform (current) | Cadenced | Why cadenced is better |
+|-----------|-------------------|----------|----------------------|
+| Scope creep | Up to 5 min lag | Seconds (event-driven) | PM sees finding while still on sprint page |
+| Blocked chain | Up to 5 min lag | Seconds (event-driven) | Intervention happens before the chain grows |
+| Stale triage | 288 pings/day about same items | 1 morning notification | One summary is more actionable than constant repetition |
+| Accountability debt | 288 pings/day | 1 morning notification | Matches 1:1 and standup rhythm. Higher frequency is surveillance, not intelligence |
+| Retro patterns | Checked 288×/day, changes ~weekly | On retro submission | Retro content changes once per sprint. 288 checks find nothing 287 times |
+
+**The key insight:** The right cadence matches the natural rhythm of the
+condition AND the workflow of the person who acts on it. A PM checking their
+morning summary acts on accountability debt. A PM interrupted mid-sprint-edit
+acts on scope creep. Different rhythms, different cadences.
+
+#### Implementation status
+
+The cadence routing is **implemented in code** — `state.ts` defines
+`scanType: 'hot' | 'daily' | 'weekly' | null`, reasoning.ts constrains finding
+types and selects models per cadence, and fetch nodes vary their data retrieval
+by scanType. What's not yet implemented is the **scheduler**: the trigger
+currently dispatches all scans as a single type. Wiring the scheduler to invoke
+the graph with different `scanType` values on different schedules is the
+remaining work.
 
 ### Deployment: Separate Service on Linode VPS
 
