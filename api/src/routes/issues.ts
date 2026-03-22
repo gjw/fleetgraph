@@ -1261,6 +1261,9 @@ router.post('/bulk', authMiddleware, async (req: Request, res: Response) => {
                  ON CONFLICT (document_id, related_id, relationship_type) DO NOTHING`,
                 [...validIds, updates.sprint_id]
               );
+
+              // Broadcast sprint change event for FleetGraph WebSocket listener
+              broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: updates.sprint_id });
             }
           }
         }
