@@ -876,6 +876,9 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
 
       // Track added sprint associations for post-commit broadcast
       addedSprintIds = toAdd.filter(bt => bt.type === 'sprint').map(bt => bt.id);
+      if (toAdd.length > 0 || toRemove.length > 0) {
+        console.log(`[documents] belongs_to update for ${id}: +${toAdd.length} -${toRemove.length} (sprint adds: ${addedSprintIds.length})`);
+      }
     }
 
     // Handle sprint_id via document_associations (when passed directly, not via belongs_to)
@@ -1024,6 +1027,9 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     // Post-commit operations (non-transactional)
 
     // Broadcast sprint change events for FleetGraph WebSocket listener
+    if (addedSprintIds.length > 0) {
+      console.log(`[documents] broadcasting sprint change: ${addedSprintIds.length} sprint(s) added for doc ${id}`);
+    }
     for (const sprintId of addedSprintIds) {
       broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: sprintId });
     }
