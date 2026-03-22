@@ -1,6 +1,7 @@
 import { getClientForState, ShipClient } from '../../ship/index.js';
 import type { GraphStateType, GraphUpdateType } from '../state.js';
 import type { ShipSprint, ShipSprintIssue, ShipDocument } from '../../ship/index.js';
+import { applyBaselines } from './scope-baseline.js';
 
 /**
  * Fetch sprint data scoped by mode.
@@ -98,6 +99,9 @@ async function fetchProactiveSprints(
     }
   }
 
+  // Apply first-scan baselines so initial planning isn't flagged as scope creep
+  applyBaselines(scopeChanges);
+
   // Retro content: weekly only
   const retroContent = needRetros ? await fetchRetroContent(client, allSprints) : [];
 
@@ -153,6 +157,8 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
         errors[`scope-changes-${sprint.id}`] = scResult.error.message;
       }
     }
+
+    applyBaselines(scopeChanges);
 
     // Fetch retro content for this sprint (and siblings if in a project)
     const retroContent = await fetchRetroContent(client, [sprint]);
@@ -211,6 +217,8 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
         }
       }
     }
+
+    applyBaselines(scopeChanges);
 
     // Also fetch the project itself
     const projectResult = await client.getProject(state.contextProjectId);
