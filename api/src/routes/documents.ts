@@ -854,6 +854,7 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     }
 
     // Handle belongs_to association updates
+    let addedSprintIds: string[] = [];
     if (hasBelongsToUpdate) {
       const newBelongsTo = data.belongs_to || [];
 
@@ -872,6 +873,9 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
       // Add new associations (single bulk INSERT)
       const toAdd = newBelongsTo.filter(bt => !currentSet.has(`${bt.type}:${bt.id}`));
       await bulkInsertAssociations(client, id, toAdd);
+
+      // Track added sprint associations for post-commit broadcast
+      addedSprintIds = toAdd.filter(bt => bt.type === 'sprint').map(bt => bt.id);
     }
 
     // Handle sprint_id via document_associations (when passed directly, not via belongs_to)
@@ -1018,6 +1022,11 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     await client.query('COMMIT');
 
     // Post-commit operations (non-transactional)
+
+    // Broadcast sprint change events for FleetGraph WebSocket listener
+    for (const sprintId of addedSprintIds) {
+      broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: sprintId });
+    }
 
     // Invalidate collaboration cache when content is updated via API
     if (contentUpdated) {
