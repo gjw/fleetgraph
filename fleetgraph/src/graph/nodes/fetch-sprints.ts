@@ -62,8 +62,8 @@ async function fetchProactiveSprints(
         continue;
       }
 
-      // Hot scan: skip completed sprints entirely (only need active for scope creep)
-      if (activeOnly && sprintResult.data.status !== 'active') {
+      // Hot scan: skip completed sprints (only need active/unset for scope creep)
+      if (activeOnly && sprintResult.data.status === 'completed') {
         continue;
       }
 
