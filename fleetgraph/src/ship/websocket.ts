@@ -110,8 +110,12 @@ export function createShipWebSocket(wsUrl: string, token: string): ShipWebSocket
       scheduleReconnect();
     });
 
-    ws.on('error', (err: Error) => {
-      console.error('[ws] error:', err.message);
+    ws.on('ping', () => {
+      ws?.pong();
+    });
+
+    ws.on('error', (err: Error & { code?: string }) => {
+      console.error('[ws] error:', err.message || err.code || 'unknown', err);
       // close event will fire after this, triggering reconnect
     });
   }
