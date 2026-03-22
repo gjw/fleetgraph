@@ -13,6 +13,8 @@ type GraphLike = {
 
 let graphRef: GraphLike | null = null;
 let hotIntervalHandle: ReturnType<typeof setInterval> | null = null;
+let dailyIntervalHandle: ReturnType<typeof setInterval> | null = null;
+let weeklyIntervalHandle: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Wait for Ship API to be reachable before starting polls.
@@ -95,14 +97,14 @@ export function startPollers(graph: GraphLike): void {
     setTimeout(() => {
       console.log(`[poller:daily] starting — interval=${DAILY_INTERVAL_MS / 1000}s`);
       runCadence(graph, 'daily');
-      setInterval(() => runCadence(graph, 'daily'), DAILY_INTERVAL_MS);
+      dailyIntervalHandle = setInterval(() => runCadence(graph, 'daily'), DAILY_INTERVAL_MS);
     }, 30_000);
 
     // Weekly: every 7 days, staggered 60s after hot
     setTimeout(() => {
       console.log(`[poller:weekly] starting — interval=${WEEKLY_INTERVAL_MS / 1000}s`);
       runCadence(graph, 'weekly');
-      setInterval(() => runCadence(graph, 'weekly'), WEEKLY_INTERVAL_MS);
+      weeklyIntervalHandle = setInterval(() => runCadence(graph, 'weekly'), WEEKLY_INTERVAL_MS);
     }, 60_000);
   });
 }

@@ -214,27 +214,27 @@ trigger, not the graph.
       └──────────┘  └────┬─────┘  │ approval)│
                          │        └────┬─────┘
                          │             │
-                         │      ┌──────▼──────┐
-                         │      │   HUMAN     │
-                         │      │   GATE      │
-                         │      │ (acknowledge│
-                         │      │  snooze/    │
-                         │      │  approve)   │
-                         │      └──────┬──────┘
-                         │             │
-                         │      ┌──────▼──────┐
-                         │      │  EXECUTE    │
-                         │      │  ACTION     │
-                         │      └──────┬──────┘
-                         │             │
-                         └──────┬──────┘
-                                │
-                         ┌──────▼──────┐
-                         │   PERSIST   │
-                         │ (save       │
-                         │  finding +  │
-                         │  state)     │
-                         └─────────────┘
+                  ┌──────▼──────┐  ┌──▼──────────┐
+                  │   PERSIST   │  │   HUMAN     │
+                  │ (save       │  │   GATE      │
+                  │  finding +  │  │ (creates    │
+                  │  auto-      │  │  finding,   │
+                  │  resolve)   │  │  awaits     │
+                  └──────┬──────┘  │  decision)  │
+                         │        └──────┬───────┘
+                         ▼               ▼
+                        END             END
+                                         │
+                              ┌──────────┘
+                              │ (via REST: POST /findings/:id/decide)
+                              ▼
+                       ┌──────────────┐
+                       │   EXECUTE    │
+                       │   ACTION     │
+                       │ (imperative, │
+                       │  after human │
+                       │  approval)   │
+                       └──────────────┘
 ```
 
 ### Node Inventory
