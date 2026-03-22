@@ -1649,32 +1649,17 @@ router.get('/:id/scope-changes', authMiddleware, async (req: Request, res: Respo
     const sprintStartDate = new Date(workspaceStartDate);
     sprintStartDate.setUTCDate(sprintStartDate.getUTCDate() + (sprintNumber - 1) * sprintDuration);
 
-    // Get all issues currently in the sprint with their estimates
+    // Get all issues currently in the sprint with their estimates and association time
+    // da.created_at = when the issue was assigned to this sprint
     const issuesResult = await pool.query(
-      `SELECT d.id, COALESCE((d.properties->>'estimate')::numeric, 0) as estimate
+      `SELECT d.id, COALESCE((d.properties->>'estimate')::numeric, 0) as estimate,
+              da.created_at as added_at
        FROM documents d
        JOIN document_associations da ON da.document_id = d.id AND da.related_id = $1 AND da.relationship_type = 'sprint'
-       WHERE d.document_type = 'issue'`,
+       WHERE d.document_type = 'issue'
+       ORDER BY da.created_at ASC`,
       [id]
     );
-
-    // Get when each issue was added to this sprint from document_history
-    // field = 'sprint_id' and new_value = sprint_id means issue was added to sprint
-    const historyResult = await pool.query(
-      `SELECT document_id, created_at, old_value, new_value
-       FROM document_history
-       WHERE field = 'sprint_id' AND new_value = $1
-       ORDER BY created_at ASC`,
-      [id]
-    );
-
-    // Build a map of issue_id -> first_added_at (when issue was added to this sprint)
-    const issueAddedAtMap: Record<string, Date> = {};
-    for (const row of historyResult.rows) {
-      if (!issueAddedAtMap[row.document_id]) {
-        issueAddedAtMap[row.document_id] = new Date(row.created_at);
-      }
-    }
 
     // Calculate original scope (issues added before or at sprint start)
     // and current scope (all issues)
@@ -1685,16 +1670,13 @@ router.get('/:id/scope-changes', authMiddleware, async (req: Request, res: Respo
       const estimate = parseFloat(issue.estimate) || 0;
       currentScope += estimate;
 
-      const addedAt = issueAddedAtMap[issue.id];
-      // If no history record, assume it was always there (original)
-      // If added before or at sprint start, it's original scope
-      if (!addedAt || addedAt <= sprintStartDate) {
+      const addedAt = new Date(issue.added_at);
+      if (addedAt <= sprintStartDate) {
         originalScope += estimate;
       }
     }
 
-    // Build scope changes timeline for the graph
-    // Each entry: { timestamp, newScope, changeType, estimateChange }
+    // Build scope changes timeline (issues added after sprint start)
     const scopeChanges: Array<{
       timestamp: string;
       scopeAfter: number;
@@ -1702,62 +1684,19 @@ router.get('/:id/scope-changes', authMiddleware, async (req: Request, res: Respo
       estimateChange: number;
     }> = [];
 
-    // Get estimates for issues when they were added
-    const issueEstimateMap: Record<string, number> = {};
-    for (const issue of issuesResult.rows) {
-      issueEstimateMap[issue.id] = parseFloat(issue.estimate) || 0;
-    }
-
-    // Only track changes after sprint starts
     let runningScope = originalScope;
-    for (const row of historyResult.rows) {
-      const createdAt = new Date(row.created_at);
-      if (createdAt > sprintStartDate) {
-        const estimate = issueEstimateMap[row.document_id] || 0;
+    for (const issue of issuesResult.rows) {
+      const addedAt = new Date(issue.added_at);
+      if (addedAt > sprintStartDate) {
+        const estimate = parseFloat(issue.estimate) || 0;
         runningScope += estimate;
         scopeChanges.push({
-          timestamp: createdAt.toISOString(),
+          timestamp: addedAt.toISOString(),
           scopeAfter: runningScope,
           changeType: 'added',
           estimateChange: estimate,
         });
       }
-    }
-
-    // Also check for issues removed from sprint (sprint_id changed away from this sprint)
-    const removedResult = await pool.query(
-      `SELECT document_id, created_at, old_value, new_value
-       FROM document_history
-       WHERE field = 'sprint_id' AND old_value = $1 AND created_at > $2
-       ORDER BY created_at ASC`,
-      [id, sprintStartDate.toISOString()]
-    );
-
-    for (const row of removedResult.rows) {
-      // We need the estimate of the issue at time of removal
-      // For simplicity, we'll use the current estimate (or 0 if issue no longer in sprint)
-      // In a real system, you might want to track historical estimates
-      const issueResult = await pool.query(
-        `SELECT COALESCE((properties->>'estimate')::numeric, 0) as estimate
-         FROM documents WHERE id = $1`,
-        [row.document_id]
-      );
-      const estimate = issueResult.rows[0] ? parseFloat(issueResult.rows[0].estimate) : 0;
-
-      scopeChanges.push({
-        timestamp: new Date(row.created_at).toISOString(),
-        scopeAfter: -1, // Will be recalculated when sorting
-        changeType: 'removed',
-        estimateChange: -estimate,
-      });
-    }
-
-    // Sort scope changes by timestamp and recalculate running scope
-    scopeChanges.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-    runningScope = originalScope;
-    for (const change of scopeChanges) {
-      runningScope += change.estimateChange;
-      change.scopeAfter = runningScope;
     }
 
     // Calculate scope change percentage
