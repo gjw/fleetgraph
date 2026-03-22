@@ -1743,17 +1743,74 @@ async function seedFleetGraphDemos() {
       [workspaceId, s3Sprints.map(s => s.id).concat([currentS3Sprint.id])],
     );
 
-    // ── Next sprint (for demo: always have an empty upcoming sprint to add issues to)
-    const nextSprintNumber = currentSprintNumber + 1;
-    await getOrCreateSprint(pool, workspaceId, programId, nextSprintNumber, {
+    // ── Demo sprint: shift workspace start date so "next sprint" = today ────
+    // Sprint dates are computed: start + (sprint_number - 1) * 7. By shifting
+    // sprint_start_date back 1 day, currentSprintNumber+1 starts today instead
+    // of tomorrow. This makes the demo sprint "active" so scope creep triggers.
+    const shiftedStart = new Date(sprintStartDate);
+    shiftedStart.setDate(shiftedStart.getDate() - 1);
+    await pool.query(
+      'UPDATE workspaces SET sprint_start_date = $1 WHERE id = $2',
+      [shiftedStart.toISOString().split('T')[0], workspaceId],
+    );
+
+    // Create the demo sprint (now starts today) with pre-planned issues
+    const demoSprintNumber = currentSprintNumber + 1;
+    const demoSprintId = await getOrCreateSprint(pool, workspaceId, programId, demoSprintNumber, {
       owner_id: pm.userId,
-      assignee_ids: [],
-      plan: '',
-      confidence: 75,
+      assignee_ids: [pm.personDocId, engineer1.personDocId, engineer2.personDocId],
+      plan: 'Deliver notification system MVP and resolve connection pool issues.',
+      confidence: 80,
       status: 'active',
       createdBy: pm.userId,
+      createdAt: daysAgo(2), // created 2 days ago (before sprint start = today)
     });
-    console.log(`✅ Next sprint: Week ${nextSprintNumber} (empty, for demo)`);
+
+    // 6 pre-start issues (planned workload — created before sprint start)
+    const demoPreIssues = [
+      { title: 'Build notification preferences UI', state: 'todo', priority: 'high', assignee: engineer1 },
+      { title: 'Add email notification templates', state: 'todo', priority: 'high', assignee: engineer2 },
+      { title: 'Implement notification queue', state: 'in_progress', priority: 'high', assignee: engineer1 },
+      { title: 'Write notification API tests', state: 'todo', priority: 'medium', assignee: pm },
+      { title: 'Update notification settings page', state: 'todo', priority: 'medium', assignee: engineer2 },
+      { title: 'Review notification security model', state: 'todo', priority: 'low', assignee: pm },
+    ];
+
+    for (let i = 0; i < demoPreIssues.length; i++) {
+      const issue = demoPreIssues[i];
+      const id = demoId(`demo-sprint:pre-issue:${i}`);
+      await upsertDoc(pool, id, workspaceId, 'issue', issue.title, {
+        state: issue.state,
+        priority: issue.priority,
+        assignee_id: issue.assignee.userId,
+        source: 'internal',
+        estimate: [4, 6, 5, 3, 4, 2][i],
+      }, { createdBy: pm.userId, createdAt: daysAgo(3) }); // created 3 days ago = pre-start
+      await upsertAssociation(pool, id, programId, 'program');
+      await upsertAssociation(pool, id, demoSprintId, 'sprint');
+    }
+
+    // 4 unassigned backlog issues (for Chair to add during demo = post-start scope creep)
+    const demoBacklogIssues = [
+      { title: 'Add push notification support', priority: 'medium' },
+      { title: 'Implement notification batching', priority: 'low' },
+      { title: 'Add notification analytics dashboard', priority: 'low' },
+      { title: 'Build notification A/B testing framework', priority: 'low' },
+    ];
+
+    for (let i = 0; i < demoBacklogIssues.length; i++) {
+      const issue = demoBacklogIssues[i];
+      const id = demoId(`demo-sprint:backlog:${i}`);
+      await upsertDoc(pool, id, workspaceId, 'issue', issue.title, {
+        state: 'backlog',
+        priority: issue.priority,
+        source: 'internal',
+      }, { createdBy: pm.userId, createdAt: daysAgo(5) });
+      await upsertAssociation(pool, id, programId, 'program');
+      // NOT assigned to sprint — these are backlog for Chair to move during demo
+    }
+
+    console.log(`✅ Demo sprint: Week ${demoSprintNumber} (6 pre-start issues, 4 backlog ready to add)`);
 
     // ── FleetGraph service API token ────────────────────────────────────────
     // FleetGraph's proactive mode authenticates to Ship via a service account
