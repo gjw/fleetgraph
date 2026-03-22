@@ -1776,16 +1776,16 @@ async function seedFleetGraphDemos() {
       { title: 'Review notification security model', state: 'todo', priority: 'low', assignee: pm },
     ];
 
-    for (let i = 0; i < demoPreIssues.length; i++) {
-      const issue = demoPreIssues[i];
+    const demoEstimates = [4, 6, 5, 3, 4, 2];
+    for (const [i, issue] of demoPreIssues.entries()) {
       const id = demoId(`demo-sprint:pre-issue:${i}`);
       await upsertDoc(pool, id, workspaceId, 'issue', issue.title, {
         state: issue.state,
         priority: issue.priority,
         assignee_id: issue.assignee.userId,
         source: 'internal',
-        estimate: [4, 6, 5, 3, 4, 2][i],
-      }, { createdBy: pm.userId, createdAt: daysAgo(3) }); // created 3 days ago = pre-start
+        estimate: demoEstimates[i] ?? 4,
+      }, { createdBy: pm.userId, createdAt: daysAgo(3) });
       await upsertAssociation(pool, id, programId, 'program');
       await upsertAssociation(pool, id, demoSprintId, 'sprint');
     }
@@ -1798,8 +1798,7 @@ async function seedFleetGraphDemos() {
       { title: 'Build notification A/B testing framework', priority: 'low' },
     ];
 
-    for (let i = 0; i < demoBacklogIssues.length; i++) {
-      const issue = demoBacklogIssues[i];
+    for (const [i, issue] of demoBacklogIssues.entries()) {
       const id = demoId(`demo-sprint:backlog:${i}`);
       await upsertDoc(pool, id, workspaceId, 'issue', issue.title, {
         state: 'backlog',
