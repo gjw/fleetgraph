@@ -142,11 +142,16 @@ export async function updateExistingFinding(
     propsUpdate.severity = finding.severity;
   }
 
-  // Re-badge acknowledged findings when re-detected (condition persists or worsened)
+  // Re-badge acknowledged findings only when the condition materially changed
+  // (severity escalated or summary changed = new data). Same-state re-detection
+  // stays acknowledged — the user already knows about it.
   if (props.human_decision === 'acknowledged') {
-    propsUpdate.human_decision = null;
-    propsUpdate.status = 'pending_decision';
-    console.log(`${logPrefix} re-detected acknowledged finding — resurfacing`);
+    const summaryChanged = enrichment?.summary && enrichment.summary !== props.summary;
+    if (severityUpgrade || summaryChanged) {
+      propsUpdate.human_decision = null;
+      propsUpdate.status = 'pending_decision';
+      console.log(`${logPrefix} acknowledged finding changed — resurfacing (${severityUpgrade ? 'severity' : 'summary'})`);
+    }
   }
   if (enrichment?.affected_entity_name) {
     propsUpdate.affected_entity_name = enrichment.affected_entity_name;
