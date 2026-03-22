@@ -1743,6 +1743,18 @@ async function seedFleetGraphDemos() {
       [workspaceId, s3Sprints.map(s => s.id).concat([currentS3Sprint.id])],
     );
 
+    // ── Next sprint (for demo: always have an empty upcoming sprint to add issues to)
+    const nextSprintNumber = currentSprintNumber + 1;
+    await getOrCreateSprint(pool, workspaceId, programId, nextSprintNumber, {
+      owner_id: pm.userId,
+      assignee_ids: [],
+      plan: '',
+      confidence: 75,
+      status: 'active',
+      createdBy: pm.userId,
+    });
+    console.log(`✅ Next sprint: Week ${nextSprintNumber} (empty, for demo)`);
+
     // ── FleetGraph service API token ────────────────────────────────────────
     // FleetGraph's proactive mode authenticates to Ship via a service account
     // API token. On a fresh database this token doesn't exist, so all fetch
