@@ -32,6 +32,7 @@ export function applyBaselines(scopeChanges: ScopeEntry[]): void {
         totalEstimates: sc.currentScope,
         recordedAt: now,
       });
+      console.log(`[baseline] ${sc.sprintName} (${sc.sprintId.slice(0,8)}): baseline set at ${sc.currentScope} estimates`);
       sc.originalScope = sc.currentScope;
       sc.scopeChangePercent = 0;
       sc.scopeChanges = [];
@@ -39,10 +40,12 @@ export function applyBaselines(scopeChanges: ScopeEntry[]): void {
     }
 
     // Subsequent scan — compare against baseline
+    const prevPct = sc.scopeChangePercent;
     sc.originalScope = existing.totalEstimates;
     sc.scopeChangePercent = existing.totalEstimates > 0
       ? Math.round(((sc.currentScope - existing.totalEstimates) / existing.totalEstimates) * 100)
       : (sc.currentScope > 0 ? 100 : 0);
+    console.log(`[baseline] ${sc.sprintName} (${sc.sprintId.slice(0,8)}): baseline=${existing.totalEstimates}, current=${sc.currentScope}, pct=${sc.scopeChangePercent}% (api said ${prevPct}%)`);
 
     // Only include scope changes after baseline was recorded
     sc.scopeChanges = sc.scopeChanges.filter(
