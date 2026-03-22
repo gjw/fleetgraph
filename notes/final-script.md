@@ -105,9 +105,10 @@ FleetGraph Demo, Week 14)
 
 #### Step 2: Add issues mid-sprint
 
-**Navigate to:** Issues page → filter to FleetGraph Demo → select 3-4 unassigned
-backlog issues → "Move to Week" → Week 14 (the empty next sprint created by the
-FG seed — if it doesn't appear, the seed fix didn't run, redeploy --fresh)
+**Navigate to:** Left sidebar → FleetGraph Demo program → Issues tab → select
+3-4 unassigned backlog issues → "Move to Week" → Week 14. (Using the program
+page, not the global Issues page — this scopes the week dropdown to FleetGraph
+Demo only, avoiding duplicate week names from other programs.)
 
 > I'm adding 3 issues to this sprint mid-week. In a real team, this is a PM
 > cramming scope, or a stakeholder adding urgent requests.
