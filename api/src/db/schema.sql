@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS oauth_state (
 
 -- Document types enum
 DO $$ BEGIN
-  CREATE TYPE document_type AS ENUM ('wiki', 'issue', 'program', 'project', 'sprint', 'person', 'weekly_plan', 'weekly_retro', 'standup', 'weekly_review', 'fleetgraph_finding', 'fleetgraph_config');
+  CREATE TYPE document_type AS ENUM ('wiki', 'issue', 'program', 'project', 'sprint', 'person', 'weekly_plan', 'weekly_retro', 'standup', 'weekly_review', 'fleetgraph_finding');
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;

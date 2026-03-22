@@ -91,6 +91,9 @@ async function fetchProactiveSprints(
           sprintName: sprint.name ?? `Sprint ${sprint.sprint_number}`,
           ...scResult.data,
         });
+      } else if (scResult.error) {
+        console.log(`[fetch-sprints] error fetching scope changes for sprint ${sprint.id}: ${scResult.error.message}`);
+        errors[`scope-changes-${sprint.id}`] = scResult.error.message;
       }
     }
   }
@@ -142,6 +145,9 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
           sprintName: sprint.name ?? `Sprint ${sprint.sprint_number}`,
           ...scResult.data,
         });
+      } else if (scResult.error) {
+        console.log(`[fetch-sprints] error fetching scope changes for sprint ${sprint.id}: ${scResult.error.message}`);
+        errors[`scope-changes-${sprint.id}`] = scResult.error.message;
       }
     }
 
@@ -152,7 +158,13 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
       `[fetch-sprints] on-demand (sprint): "${sprint.name}", ${sprintIssues.length} issues, ${retroContent.length} retros`,
     );
 
-    return { sprints: [sprint], sprintIssues, scopeChanges, retroContent };
+    return {
+      sprints: [sprint],
+      sprintIssues,
+      scopeChanges,
+      retroContent,
+      ...(Object.keys(errors).length > 0 ? { fetchErrors: errors } : {}),
+    };
   }
 
   // If we have a project, fetch its sprints
@@ -185,6 +197,9 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
             sprintName: sr.data.name ?? `Sprint ${sr.data.sprint_number}`,
             ...scr.data,
           });
+        } else if (scr.error) {
+          console.log(`[fetch-sprints] error fetching scope changes for sprint ${ps.id}: ${scr.error.message}`);
+          errors[`scope-changes-${ps.id}`] = scr.error.message;
         }
       }
     }

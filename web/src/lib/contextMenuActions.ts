@@ -421,7 +421,6 @@ const CONTEXT_ACTIONS: Record<DocumentType, ContextMenuItem[]> = {
     },
   ],
   fleetgraph_finding: [],
-  fleetgraph_config: [],
 };
 
 // Backlink-specific actions (not a document type, but used in BacklinksPanel)
