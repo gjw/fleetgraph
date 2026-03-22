@@ -105,21 +105,29 @@ FleetGraph Demo, Week 14)
 
 #### Step 2: Add issues mid-sprint
 
-**Navigate to:** Left sidebar → FleetGraph Demo program → Issues tab → select
-3-4 unassigned backlog issues → "Move to Week" → Week 14. (Using the program
-page, not the global Issues page — this scopes the week dropdown to FleetGraph
-Demo only, avoiding duplicate week names from other programs.)
+**From the Week 14 sprint page, click "New Issue" and create 3 issues quickly:**
+- "Add push notification support" (medium priority)
+- "Implement notification batching" (low priority)
+- "Add notification analytics" (low priority)
 
-> I'm adding 3 issues to this sprint mid-week. In a real team, this is a PM
-> cramming scope, or a stakeholder adding urgent requests.
+Creating them FROM the sprint page assigns them directly to Week 14 with
+today's timestamp — which is after the sprint started. This is scope creep.
+
+> I'm adding 3 new issues to this sprint mid-week. In a real team, this is a PM
+> cramming scope, or a stakeholder adding urgent requests. Watch what happens.
+
+**[SPLIT SCREEN or switch to LangSmith immediately — viewer should SEE the
+trace appear in real-time as the WebSocket fires]**
 
 **[WAIT: 10-30 seconds for WebSocket trigger + debounce + graph run]**
 
-**[WHILE WAITING]:**
+**[AS SOON AS the trace appears in LangSmith, point at it:]**
 
-> The WebSocket event just fired. FleetGraph's hot-loop scan is running — it only
-> checks for scope creep and blocked chains, not everything. Focused prompt, fast
-> execution.
+> There — the WebSocket event just fired and the graph started automatically.
+> You can see the trace appearing in real time in LangSmith. This is the hot-loop
+> scan — a focused prompt that only checks for scope creep and blocked chains.
+> It doesn't analyze the entire workspace, just the conditions that need
+> real-time detection.
 
 #### Step 3: Finding appears
 
