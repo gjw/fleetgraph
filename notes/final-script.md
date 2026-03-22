@@ -74,11 +74,11 @@ but visually confusing. If it shows up, don't dwell on it.
 
 ### Act 1: Cold Open (30 seconds)
 
-"Ship is a project management tool for government teams. It shows you what's
-happening — issues, sprints, people, plans. But it doesn't tell you what's wrong.
-
-FleetGraph is the intelligence layer. It watches Ship's data, detects conditions
-worth surfacing, and knows when to act and when to wait for a human."
+> Ship is a project management tool for government teams. It shows you what's
+> happening — issues, sprints, people, plans. But it doesn't tell you what's wrong.
+>
+> FleetGraph is the intelligence layer. It watches Ship's data, detects conditions
+> worth surfacing, and knows when to act and when to wait for a human.
 
 ### Act 2: The WebSocket Story — Scope Creep Detection (2 minutes)
 
@@ -86,48 +86,56 @@ worth surfacing, and knows when to act and when to wait for a human."
 
 #### Setup narration
 
-"FleetGraph monitors Ship in real time via WebSocket. When something changes —
-an issue is added, a state changes — the agent evaluates it within seconds.
-
-Let me show you what happens when someone adds issues to a sprint that's already
-running."
+> FleetGraph has three trigger modes. Real-time detection via WebSocket — when
+> someone changes something in Ship, the agent evaluates it within seconds.
+> Scheduled scans for things like stale triage and accountability gaps. And
+> on-demand — a user asks a question from any document they're looking at.
+>
+> Let me start with real-time. Watch what happens when someone adds issues to a
+> sprint that's already running.
 
 #### Step 1: Show the sprint
 
 **Navigate to:** FleetGraph Demo → Week 14 sprint page (or Issues filtered to
 FleetGraph Demo, Week 14)
 
-"This is Week 14. It has [X] issues committed at sprint start."
+> This is Week 14. It has [X] issues committed at sprint start.
 
 **[CAPTURE: note the current issue count for narration]**
 
 #### Step 2: Add issues mid-sprint
 
 **Navigate to:** Issues page → filter to FleetGraph Demo → select 3-4 unassigned
-backlog issues → "Move to Week" → Week 14
+backlog issues → "Move to Week" → Week 14 (the empty next sprint created by the
+FG seed — if it doesn't appear, the seed fix didn't run, redeploy --fresh)
 
-"I'm adding 3 issues to this sprint mid-week. In a real team, this is a PM
-cramming scope, or a stakeholder adding urgent requests."
+> I'm adding 3 issues to this sprint mid-week. In a real team, this is a PM
+> cramming scope, or a stakeholder adding urgent requests.
 
 **[WAIT: 10-30 seconds for WebSocket trigger + debounce + graph run]**
 
-**[WHILE WAITING]:** "The WebSocket event just fired. FleetGraph's hot-loop scan
-is running — it only checks for scope creep and blocked chains, not everything.
-Focused prompt, fast execution."
+**[WHILE WAITING]:**
+
+> The WebSocket event just fired. FleetGraph's hot-loop scan is running — it only
+> checks for scope creep and blocked chains, not everything. Focused prompt, fast
+> execution.
 
 #### Step 3: Finding appears
 
 **Switch to:** Findings inbox tab
 
-"There it is — scope creep detected. [Read the finding title and summary.]
-It quantifies the change and names which issues were added."
+> There it is — scope creep detected. [Read the finding title and summary.]
+> It quantifies the change and names which issues were added.
 
-**If finding doesn't appear yet:** Check LangSmith for the trace. "The graph
-ran — let me show you what happened inside."
+**If finding doesn't appear yet:** Check LangSmith for the trace.
 
-**If a CLEAN run happened first (no finding on first trigger):** "First trigger
-came back clean — scope was still within tolerance. But now..." This is actually
-ideal — shows both paths.
+> The graph ran — let me show you what happened inside.
+
+**If a CLEAN run happened first (no finding on first trigger):**
+
+> First trigger came back clean — scope was still within tolerance. But now...
+
+This is actually ideal — shows both paths.
 
 **[CAPTURE: LangSmith trace URL — make public. This is TC-1.]**
 
@@ -135,37 +143,52 @@ ideal — shows both paths.
 
 **Switch to:** LangSmith tab → click the most recent trace
 
-"Every graph run is traced in LangSmith. Let me walk through what happened."
+> Every graph run is traced in LangSmith. Let me walk through what happened.
 
 Point out:
 
-- **Trigger** — "WebSocket event, not a poll timer"
-- **Fetch nodes** — "Three parallel fetches: issues, sprints, team data"
-- **Reasoning** — "GPT-4o analyzed the sprint. [X] seconds, [X]K tokens."
-- **Classify** — "GPT-4o-mini classified the output. It chose [action_propose/notify]
-  because a concrete condition was detected."
-- **Persist/Human Gate** — "Finding persisted as a Ship document. Waiting for
-  human decision."
+- **Trigger:**
 
-"Same graph, different conditions produce different paths. If the sprint had
-been healthy, the classify node would have chosen Clean and stayed silent."
+> WebSocket event, not a poll timer.
+
+- **Fetch nodes:**
+
+> Three parallel fetches: issues, sprints, team data.
+
+- **Reasoning:**
+
+> GPT-4o analyzed the sprint. [X] seconds, [X]K tokens.
+
+- **Classify:**
+
+> GPT-4o-mini classified the output. It chose [action_propose/notify] because a
+> concrete condition was detected.
+
+- **Persist/Human Gate:**
+
+> Finding persisted as a Ship document. Waiting for human decision.
+
+Then:
+
+> Same graph, different conditions produce different paths. If the sprint had been
+> healthy, the classify node would have chosen Clean and stayed silent.
 
 #### Step 5: Human decision
 
 **Switch to:** Findings inbox
 
-"The user has three choices. Acknowledge — I've seen it, keep tracking.
-Snooze — remind me tomorrow or next week. Or Approve, if the agent proposed
-a specific action."
+> The user has three choices. Acknowledge — I've seen it, keep tracking. Snooze —
+> remind me tomorrow or next week. Or Approve, if the agent proposed a specific
+> action.
 
 **Click Acknowledge on the scope creep finding.**
 
-"I've acknowledged it. The badge clears, but FleetGraph keeps watching. If
-this sprint gets worse — more issues added, completion rate drops — it'll
-escalate the severity and re-badge me."
+> I've acknowledged it. The badge clears, but FleetGraph keeps watching. If this
+> sprint gets worse — more issues added, completion rate drops — it'll escalate the
+> severity and re-badge me.
 
-"There is no dismiss button. You can't permanently silence a finding. In a
-government project management tool, that's intentional."
+> There is no dismiss button. You can't permanently silence a finding. In a
+> government project management tool, that's intentional.
 
 ---
 
@@ -178,7 +201,7 @@ government project management tool, that's intentional."
 **Switch to:** Tab 4 — the blocked issue ("Add health check endpoint for
 connection pool" or "Document pool configuration for ops")
 
-"The other mode is on-demand. I'm looking at an issue that seems stuck."
+> The other mode is on-demand. I'm looking at an issue that seems stuck.
 
 #### Ask the question
 
@@ -188,19 +211,21 @@ connection pool" or "Document pool configuration for ops")
 
 **[WAIT: ~10-15 seconds]**
 
-"The agent is analyzing — it fetches this issue's context, traces the
-dependency chain, checks who owns each link."
+> The agent is analyzing — it fetches this issue's context, traces the dependency
+> chain, checks who owns each link.
 
 #### Show the response
 
-"It found the chain: [read the response]. The bottleneck is [person/issue].
-It's proposing [action — reassign, escalate, etc.]."
+> It found the chain: [read the response]. The bottleneck is [person/issue]. It's
+> proposing [action — reassign, escalate, etc.].
 
-**If the response is a finding with Approve button:** "I can approve this
-action and FleetGraph will execute it through Ship's API."
+**If the response is a finding with Approve button:**
 
-**If the response is conversational without Approve:** "It analyzed the
-chain and gave me the information I need to make the call."
+> I can approve this action and FleetGraph will execute it through Ship's API.
+
+**If the response is conversational without Approve:**
+
+> It analyzed the chain and gave me the information I need to make the call.
 
 **[CAPTURE: LangSmith trace URL. This is TC-2. Note: different path from
 proactive — context node resolves document, scoped fetch.]**
@@ -213,14 +238,14 @@ proactive — context node resolves document, scoped fetch.]**
 
 **Navigate to:** Findings inbox → show an existing stale triage finding
 
-"FleetGraph also runs proactive scans. This morning's scan found 7 issues
-stuck in triage for over 5 days. [Read the finding summary.] Four external
-bug reports, two internal feature requests."
+> FleetGraph also runs proactive scans. This morning's scan found 7 issues stuck
+> in triage for over 5 days. [Read the finding summary.] Four external bug reports,
+> two internal feature requests.
 
 **Click through** to the affected entity → navigate to the issues list →
 filter to triage status
 
-"Here are the actual issues. The agent flagged them, the PM triages them."
+> Here are the actual issues. The agent flagged them, the PM triages them.
 
 **[CAPTURE: proactive trace URL if not already captured. This is TC-3.]**
 
@@ -230,20 +255,19 @@ filter to triage status
 
 Rapid-fire, no deep dives:
 
-- **"Findings are Ship documents"** — they're searchable, commentable, linked
-  to affected entities via associations. Not a shadow database.
+> Findings are Ship documents — they're searchable, commentable, linked to affected
+> entities via associations. Not a shadow database.
 
-- **"Dual auth model"** — proactive mode uses a service account. On-demand
-  mode forwards the user's session. The agent can't see documents the user
-  can't see. In a federal context, this prevents data leakage of
-  pre-decisional material.
+> Dual auth model — proactive mode uses a service account. On-demand mode forwards
+> the user's session. The agent can't see documents the user can't see. In a federal
+> context, this prevents data leakage of pre-decisional material.
 
-- **"Cadenced scans"** — not everything runs every 5 minutes. Scope creep and
-  blocked chains are real-time via WebSocket. Stale triage and accountability
-  run daily. Retro mining runs weekly. Right cadence for the right condition.
+> Cadenced scans — not everything runs every 5 minutes. Scope creep and blocked
+> chains are real-time via WebSocket. Stale triage and accountability run daily.
+> Retro mining runs weekly. Right cadence for the right condition.
 
-- **"No permanent dismiss"** — acknowledge and snooze only. The system keeps
-  watching. A government team can't silence institutional memory.
+> No permanent dismiss — acknowledge and snooze only. The system keeps watching. A
+> government team can't silence institutional memory.
 
 ---
 
@@ -251,11 +275,11 @@ Rapid-fire, no deep dives:
 
 **Show:** FLEETGRAPH.md briefly, or just narrate
 
-"Full documentation in FLEETGRAPH.md — 7 use cases, 5 test cases with
-LangSmith traces, architecture decisions, and cost analysis."
+> Full documentation in FLEETGRAPH.md — 7 use cases, 5 test cases with LangSmith
+> traces, architecture decisions, and cost analysis.
 
-"Current cost: approximately $[X] per graph run, $[X] per day with cadenced
-scanning. At 100 users, $[X]/month. At 1,000, $[X]/month."
+> Current cost: approximately $[X] per graph run, $[X] per day with cadenced
+> scanning. At 100 users, $[X]/month. At 1,000, $[X]/month.
 
 **[Numbers from bd-3hf — fill in after cost analysis is done]**
 
@@ -263,9 +287,9 @@ scanning. At 100 users, $[X]/month. At 1,000, $[X]/month."
 
 ### Act 7: Close (15 seconds)
 
-"FleetGraph turns Ship from a dashboard into a system that watches, reasons,
-and knows when to wait for a human. Test cases, traces, and architecture
-decisions are all in the repo."
+> FleetGraph turns Ship from a dashboard into a system that watches, reasons, and
+> knows when to wait for a human. Test cases, traces, and architecture decisions
+> are all in the repo.
 
 ---
 
