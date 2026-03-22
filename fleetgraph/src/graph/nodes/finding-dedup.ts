@@ -140,12 +140,13 @@ export async function updateExistingFinding(
 
   if (severityUpgrade) {
     propsUpdate.severity = finding.severity;
-    // Re-badge acknowledged findings on severity escalation
-    if (props.human_decision === 'acknowledged') {
-      propsUpdate.human_decision = null;
-      propsUpdate.status = 'active';
-      console.log(`${logPrefix} severity escalated on acknowledged finding — re-badging`);
-    }
+  }
+
+  // Re-badge acknowledged findings when re-detected (condition persists or worsened)
+  if (props.human_decision === 'acknowledged') {
+    propsUpdate.human_decision = null;
+    propsUpdate.status = 'pending_decision';
+    console.log(`${logPrefix} re-detected acknowledged finding — resurfacing`);
   }
   if (enrichment?.affected_entity_name) {
     propsUpdate.affected_entity_name = enrichment.affected_entity_name;
