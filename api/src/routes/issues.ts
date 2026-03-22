@@ -630,21 +630,10 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 
     await client.query('COMMIT');
 
-    // Auto-complete sprint_issues accountability when first issue is created in a sprint
+    // Broadcast sprint change event for every issue added to a sprint
     const sprintAssociations = belongs_to.filter(bt => bt.type === 'sprint');
     for (const sprintAssoc of sprintAssociations) {
-      // Check if this is the first issue in the sprint
-      const issueCountResult = await pool.query(
-        `SELECT COUNT(*) as count FROM document_associations
-         WHERE related_id = $1 AND relationship_type = 'sprint'`,
-        [sprintAssoc.id]
-      );
-      const issueCount = parseInt(issueCountResult.rows[0].count, 10);
-
-      // Broadcast celebration when first issue is added to sprint
-      if (issueCount === 1) {
-        broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: sprintAssoc.id });
-      }
+      broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: sprintAssoc.id });
     }
 
     // Get the belongs_to associations with display info
@@ -950,23 +939,14 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
 
     // Post-commit operations (non-transactional)
 
-    // Check if a NEW sprint association was added and this is the first issue in that sprint
+    // Broadcast sprint change event for every issue moved into a sprint
     if (belongsToChanged) {
       const oldSprintIds = oldBelongsTo.filter(bt => bt.type === 'sprint').map(bt => bt.id);
       const newSprintIds = newBelongsTo.filter(bt => bt.type === 'sprint').map(bt => bt.id);
       const addedSprintIds = newSprintIds.filter(sprintId => !oldSprintIds.includes(sprintId));
 
       for (const sprintId of addedSprintIds) {
-        const issueCountResult = await pool.query(
-          `SELECT COUNT(*) as count FROM document_associations
-           WHERE related_id = $1 AND relationship_type = 'sprint'`,
-          [sprintId]
-        );
-        const issueCount = parseInt(issueCountResult.rows[0].count, 10);
-
-        if (issueCount === 1) {
-          broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: sprintId });
-        }
+        broadcastToUser(req.userId!, 'accountability:updated', { type: 'week_issues', targetId: sprintId });
       }
     }
 
