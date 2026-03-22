@@ -1700,9 +1700,11 @@ router.get('/:id/scope-changes', authMiddleware, async (req: Request, res: Respo
     }
 
     // Calculate scope change percentage
+    // When originalScope is 0 but issues were added post-start, report as 100%
+    // (all current scope is post-start additions)
     const scopeChangePercent = originalScope > 0
       ? Math.round(((currentScope - originalScope) / originalScope) * 100)
-      : 0;
+      : (currentScope > 0 && scopeChanges.length > 0 ? 100 : 0);
 
     res.json({
       originalScope,
