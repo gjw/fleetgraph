@@ -219,6 +219,9 @@ async function getOrCreateSprint(
     status: opts.status ?? 'active',
   }, { createdBy: opts.createdBy, createdAt: opts.createdAt });
   await upsertAssociation(pool, id, programId, 'program');
+  if (opts.project_id) {
+    await upsertAssociation(pool, id, opts.project_id, 'project');
+  }
 
   return id;
 }
@@ -1758,6 +1761,7 @@ async function seedFleetGraphDemos() {
     const demoSprintNumber = currentSprintNumber + 1;
     const demoSprintId = await getOrCreateSprint(pool, workspaceId, programId, demoSprintNumber, {
       owner_id: pm.userId,
+      project_id: projectIds.product,
       assignee_ids: [pm.personDocId, engineer1.personDocId, engineer2.personDocId],
       plan: 'Deliver notification system MVP and resolve connection pool issues.',
       confidence: 80,
