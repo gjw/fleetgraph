@@ -69,7 +69,7 @@ async function fetchProactiveSprints(
 
       allSprints.push(sprintResult.data);
 
-      if (needSprintIssues && sprintResult.data.status === 'active') {
+      if (needSprintIssues && sprintResult.data.status !== 'completed') {
         const issuesResult = await client.getSprintIssues(ps.id);
         if (issuesResult.error) {
           errors[`sprint-issues-${ps.id}`] = issuesResult.error.message;
@@ -80,7 +80,7 @@ async function fetchProactiveSprints(
     }
   }
 
-  const activeSprints = allSprints.filter(s => s.status === 'active');
+  const activeSprints = allSprints.filter(s => s.status !== 'completed');
   const scopeChanges: GraphUpdateType['scopeChanges'] = [];
 
   if (needScopeChanges) {
