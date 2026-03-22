@@ -135,6 +135,9 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
     const issuesResult = await client.getSprintIssues(state.contextSprintId);
     if (issuesResult.data) {
       sprintIssues.push(...issuesResult.data);
+    } else if (issuesResult.error) {
+      console.log(`[fetch-sprints] error fetching sprint issues for ${state.contextSprintId}: ${issuesResult.error.message}`);
+      errors[`sprint-issues-${state.contextSprintId}`] = issuesResult.error.message;
     }
 
     if (sprint.status === 'active') {
@@ -188,7 +191,12 @@ async function fetchOnDemandSprints(client: ShipClient, state: GraphStateType): 
 
       if (sr.data.status === 'active') {
         const ir = await client.getSprintIssues(ps.id);
-        if (ir.data) allSprintIssues.push(...ir.data);
+        if (ir.data) {
+          allSprintIssues.push(...ir.data);
+        } else if (ir.error) {
+          console.log(`[fetch-sprints] error fetching sprint issues for ${ps.id}: ${ir.error.message}`);
+          errors[`sprint-issues-${ps.id}`] = ir.error.message;
+        }
 
         const scr = await client.getSprintScopeChanges(ps.id);
         if (scr.data) {

@@ -44,11 +44,17 @@ export async function fetchIssuesNode(
     }
     issues = result.data;
   } else if (state.mode === 'on_demand') {
-    issues = await fetchOnDemandIssues(client, state);
+    const onDemandResult = await fetchOnDemandIssues(client, state);
+    issues = onDemandResult.issues;
 
     // For on-demand issue views, resolve the dependency chain
     if (state.documentType === 'issue' && state.documentId) {
       dependencyChain = await fetchDependencyChain(client, state.documentId);
+    }
+
+    if (Object.keys(onDemandResult.errors).length > 0) {
+      console.log(`[fetch-issues] fetched ${issues.length} issues, ${dependencyChain.length} deps (mode=${state.mode})`);
+      return { issues, dependencyChain, fetchErrors: onDemandResult.errors };
     }
   }
 
@@ -56,14 +62,19 @@ export async function fetchIssuesNode(
   return { issues, dependencyChain };
 }
 
-async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): Promise<ShipIssue[]> {
+async function fetchOnDemandIssues(
+  client: ShipClient,
+  state: GraphStateType,
+): Promise<{ issues: ShipIssue[]; errors: Record<string, string> }> {
+  const errors: Record<string, string> = {};
 
   // If viewing a specific issue, fetch it + its sprint context
   if (state.documentType === 'issue' && state.documentId) {
     const issueResult = await client.getIssue(state.documentId);
     if (issueResult.error) {
       console.log(`[fetch-issues] error fetching issue: ${issueResult.error.message}`);
-      return [];
+      errors['fetch-issue'] = issueResult.error.message;
+      return { issues: [], errors };
     }
 
     const issues: ShipIssue[] = [issueResult.data];
@@ -80,10 +91,13 @@ async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): P
             issues.push(si);
           }
         }
+      } else if (sprintIssuesResult.error) {
+        console.log(`[fetch-issues] error fetching sprint issues: ${sprintIssuesResult.error.message}`);
+        errors[`sprint-issues-${state.contextSprintId}`] = sprintIssuesResult.error.message;
       }
     }
 
-    return issues;
+    return { issues, errors };
   }
 
   // If viewing a sprint, fetch issues in that sprint
@@ -92,13 +106,21 @@ async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): P
       sprint_id: state.contextSprintId,
       state: 'triage,open,in_progress,in_review,blocked',
     });
-    return result.data ?? [];
+    if (result.error) {
+      console.log(`[fetch-issues] error fetching sprint issues: ${result.error.message}`);
+      errors[`sprint-issues-${state.contextSprintId}`] = result.error.message;
+    }
+    return { issues: result.data ?? [], errors };
   }
 
   // If viewing a project, fetch issues in that project
   if (state.documentType === 'project' && state.contextProjectId) {
     const result = await client.getProjectIssues(state.contextProjectId);
-    return result.data ?? [];
+    if (result.error) {
+      console.log(`[fetch-issues] error fetching project issues: ${result.error.message}`);
+      errors[`project-issues-${state.contextProjectId}`] = result.error.message;
+    }
+    return { issues: result.data ?? [], errors };
   }
 
   // If viewing a program, fetch issues filtered by program
@@ -107,7 +129,11 @@ async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): P
       program_id: state.contextProgramId,
       state: 'triage,open,in_progress,in_review,blocked',
     });
-    return result.data ?? [];
+    if (result.error) {
+      console.log(`[fetch-issues] error fetching program issues: ${result.error.message}`);
+      errors[`program-issues-${state.contextProgramId}`] = result.error.message;
+    }
+    return { issues: result.data ?? [], errors };
   }
 
   // userId but no document context — fetch their assigned issues
@@ -116,14 +142,22 @@ async function fetchOnDemandIssues(client: ShipClient, state: GraphStateType): P
       assignee_id: state.userId,
       state: 'triage,open,in_progress,in_review,blocked',
     });
-    return result.data ?? [];
+    if (result.error) {
+      console.log(`[fetch-issues] error fetching user issues: ${result.error.message}`);
+      errors[`user-issues-${state.userId}`] = result.error.message;
+    }
+    return { issues: result.data ?? [], errors };
   }
 
   // Fallback: active issues only
   const result = await client.getIssues({
     state: 'triage,open,in_progress,in_review,blocked',
   });
-  return result.data ?? [];
+  if (result.error) {
+    console.log(`[fetch-issues] error fetching active issues: ${result.error.message}`);
+    errors['fetch-issues-fallback'] = result.error.message;
+  }
+  return { issues: result.data ?? [], errors };
 }
 
 // ── Dependency chain fetching ───────────────────────────────────────────────

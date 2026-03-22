@@ -110,6 +110,18 @@ export function startPollers(graph: GraphLike): void {
 }
 
 /**
+ * Stop all pollers. Clears interval handles so in-flight runs can finish
+ * but no new runs are scheduled.
+ */
+export function stopPollers(): void {
+  if (hotIntervalHandle) { clearInterval(hotIntervalHandle); hotIntervalHandle = null; }
+  if (dailyIntervalHandle) { clearInterval(dailyIntervalHandle); dailyIntervalHandle = null; }
+  if (weeklyIntervalHandle) { clearInterval(weeklyIntervalHandle); weeklyIntervalHandle = null; }
+  graphRef = null;
+  console.log('[poller] all pollers stopped');
+}
+
+/**
  * @deprecated Use startPollers() instead. Kept for backwards compatibility.
  */
 export function startProactivePoller(graph: GraphLike): void {
