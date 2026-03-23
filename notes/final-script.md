@@ -19,6 +19,22 @@ LinkedIn-worthy: shows product thinking AND technical depth.
 
 ## Pre-Recording Setup
 
+### Manual scan commands (run from agentforge, in ~/fleetgraph)
+
+```bash
+export PATH=/root/.nodenv/shims:/root/.nodenv/bin:$PATH
+cd ~/fleetgraph
+
+pnpm --filter fleetgraph fg:scan hot       # scope creep + blocked chains (~$0.01, fast)
+pnpm --filter fleetgraph fg:scan daily     # stale triage, accountability, workload (~$0.05)
+pnpm --filter fleetgraph fg:scan weekly    # retro pattern analysis (~$0.03)
+pnpm --filter fleetgraph fg:scan all       # run all three sequentially
+```
+
+Use these to force a scan anytime — don't wait for the poll timer or WebSocket.
+Useful for: capturing a clean trace (scan against healthy data), re-running
+after acknowledging findings, or triggering during the demo if WebSocket is slow.
+
 ### 1. Fresh deploy
 
 ```bash
@@ -134,17 +150,12 @@ trace appear in real-time as the WebSocket fires]**
 **Switch to:** Findings inbox tab
 
 > There it is — scope creep detected. [Read the finding title and summary.]
-> It quantifies the change and names which issues were added.
+> It quantifies the change and links to the affected week so you can review
+> what was added.
 
-**If finding doesn't appear yet:** Check LangSmith for the trace.
-
-> The graph ran — let me show you what happened inside.
-
-**If a CLEAN run happened first (no finding on first trigger):**
-
-> First trigger came back clean — scope was still within tolerance. But now...
-
-This is actually ideal — shows both paths.
+**If finding doesn't appear yet:** Check LangSmith — the trace should be
+there. Give it another few seconds for persist to complete, then refresh
+the findings page.
 
 **[CAPTURE: LangSmith trace URL — make public. This is TC-1.]**
 
@@ -201,62 +212,74 @@ Then:
 
 ---
 
-### Act 3: On-Demand — Blocked Chain Analysis (1 minute)
+### Act 3: On-Demand — Sprint Analysis (1 minute)
 
-**This shows on-demand mode + the Approve action.**
+**This shows on-demand mode — scoped to a specific document.**
 
-#### Navigate to the blocked issue
+#### Navigate to Week 13
 
-**Switch to:** Tab 4 — the blocked issue ("Add health check endpoint for
-connection pool" or "Document pool configuration for ops")
+**From findings inbox:** click through a Week 13 finding → lands on Week 13
+issues → click "Overview" tab to get to the sprint page with FleetGraph panel.
 
-> The other mode is on-demand. I'm looking at an issue that seems stuck.
+> The other mode is on-demand. I'm looking at a sprint and I want to know
+> what's going on.
 
 #### Ask the question
 
-**Open FleetGraph chat panel** (footer toggle or predefined button)
+**Open FleetGraph chat panel** (footer toggle)
 
-**Click:** "What's blocking this?" button (predefined) or type it
+**Click:** "Analyze this week" predefined button
 
 **[WAIT: ~10-15 seconds]**
 
-> The agent is analyzing — it fetches this issue's context, traces the dependency
-> chain, checks who owns each link.
+> The agent is analyzing this specific sprint — it fetches the issues assigned
+> to this week, checks for missing documentation, workload problems, anything
+> stuck.
 
 #### Show the response
 
-> It found the chain: [read the response]. The bottleneck is [person/issue]. It's
-> proposing [action — reassign, escalate, etc.].
-
-**If the response is a finding with Approve button:**
-
-> I can approve this action and FleetGraph will execute it through Ship's API.
-
-**If the response is conversational without Approve:**
-
-> It analyzed the chain and gave me the information I need to make the call.
+> [Read the findings — expect: missing sprint plan, David Kim overloaded,
+> possibly stale triage.] The analysis is scoped to what I'm looking at —
+> it analyzed this sprint, not the entire workspace.
 
 **[CAPTURE: LangSmith trace URL. This is TC-2. Note: different path from
-proactive — context node resolves document, scoped fetch.]**
+proactive — context node resolves the sprint document, fetch is scoped.]**
 
 ---
 
-### Act 4: Proactive Detection — Stale Triage (30 seconds)
+### Act 4: Daily Findings + Clean Weekly Trace (45-60 seconds)
 
-**This shows the daily-cadence proactive scan result.**
+**This shows the daily-cadence results AND the clean execution path.**
 
-**Navigate to:** Findings inbox → show an existing stale triage finding
+#### Part A: Show daily findings (already in inbox from baseline)
 
-> FleetGraph also runs proactive scans. This morning's scan found 7 issues stuck
-> in triage for over 5 days. [Read the finding summary.] Four external bug reports,
-> two internal feature requests.
+**Navigate to:** Findings inbox → Acknowledged tab → show stale triage finding
 
-**Click through** to the affected entity → navigate to the issues list →
-filter to triage status
+> FleetGraph also runs scheduled scans. The daily scan found stale triage issues
+> — [read the finding summary]. These have been sitting for days with no one
+> looking at them.
 
-> Here are the actual issues. The agent flagged them, the PM triages them.
+**[CAPTURE: daily scan trace URL from LangSmith. This is TC-3.]**
 
-**[CAPTURE: proactive trace URL if not already captured. This is TC-3.]**
+#### Part B: Show the clean path (weekly scan)
+
+**Run weekly scan live** (from terminal, or explain it ran at startup):
+
+```bash
+pnpm --filter fleetgraph fg:scan weekly
+```
+
+> Not every scan finds problems. The weekly scan analyzes retrospective patterns
+> across sprints. This workspace doesn't have recurring retro themes, so the
+> graph stays silent.
+
+**Switch to LangSmith** → show the weekly trace
+
+> Here's the trace — you can see the reasoning node ran, analyzed the data, and
+> the classify node chose Clean. No findings produced. The graph is conditional —
+> different data produces different paths.
+
+**[CAPTURE: weekly clean trace URL. This is TC-5.]**
 
 ---
 
