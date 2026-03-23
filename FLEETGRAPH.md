@@ -145,7 +145,7 @@ Seven use cases, derived from role-specific pain points — not from features.
 
 | # | Role | Trigger | Detection | Human Decides |
 |---|---|---|---|---|
-| UC1 | PM | Proactive, mid-sprint | **Sprint scope creep** — issues added after sprint start, quantified as % of original scope, names who added what and when | Remove added scope, extend sprint, or accept and re-prioritize |
+| UC1 | PM | Proactive, mid-sprint | **Sprint scope creep** — issues added after sprint start, quantified as % of original scope, links to affected sprint for review | Remove added scope, extend sprint, or accept and re-prioritize |
 | UC2 | PM | Proactive, daily | **Stale triage backlog** — issues in triage >48hrs, grouped by project/program, with suggested accept/reject based on priority and capacity | Accept, reject, or reassign each issue |
 | UC3 | Director | Proactive, weekly + on-demand | **Accountability debt roll-up** — missing plans, retros, standups, unresolved approvals across all teams, ranked by severity | Whether to escalate, which items to address first |
 | UC4 | PM/Engineer | On-demand, from issue or sprint view | **Blocked work chain** — traces full dependency chain: what's blocked, what's blocking, who owns each link, how long each has been stuck | Priority reordering, reassignment, scope cuts |
@@ -247,7 +247,7 @@ trigger, not the graph.
 | **Fetch Issues** | Fetch | `GET /api/issues` filtered by scope. Returns issue state, priority, assignee, timestamps. | Yes |
 | **Fetch Sprint/Project** | Fetch | Sprint detail, project detail, scope-changes, associations. | Yes |
 | **Fetch Team/People** | Fetch | Team grid, person documents, accountability items. | Yes |
-| **Reasoning** | LLM (GPT-4o) | Analyzes relationships, gaps, risk across all fetched data. Produces structured findings with severity, affected entities, recommended actions, and recipient IDs. | -- |
+| **Reasoning** | LLM (GPT-4o or GPT-4o-mini) | Analyzes relationships, gaps, risk across all fetched data. Produces structured findings with severity, affected entities, recommended actions, and recipient IDs. Model varies by cadence: GPT-4o-mini for hot scans (speed), GPT-4o for daily/weekly (depth). | -- |
 | **Classify** | LLM (GPT-4o-mini) | Routes based on reasoning output: clean / notify / action-propose. | -- |
 | **Clean** | Terminal | No problems found. Proactive: silent. On-demand: "Everything looks healthy, here's why." | -- |
 | **Notify** | Action | Persists informational finding, surfaces it in UI. No human gate needed. | -- |
@@ -264,7 +264,7 @@ trigger, not the graph.
 | Classify -> Notify | Finding detected, informational only (health score, trend, pattern) |
 | Classify -> Action Propose | Finding includes a concrete recommended action that would modify Ship state |
 | Human Gate -> Execute | User confirms proposed action |
-| Human Gate -> Persist | User acknowledges or snoozes — skip execution, still record the finding |
+| Human Gate -> END | Finding persisted with `pending_decision` status. User later acknowledges, snoozes, or approves via REST endpoint (`POST /findings/:id/decide`). Approve triggers Execute node. |
 
 ### Parallel Execution
 
@@ -315,7 +315,7 @@ Matches `fleetgraph/src/graph/state.ts` — LangGraph `Annotation.Root`, all cam
 
   // Action (HITL path)
   proposedAction: ProposedAction | null,   // singular, not array
-  humanDecision: "confirmed" | "dismissed" | "snoozed" | null,
+  humanDecision: "confirmed" | "acknowledged" | "snoozed" | null,
   executionResult: Record<string, unknown> | null,
 
   // On-demand response
@@ -378,11 +378,9 @@ human_decision, recipient_ids, snooze_until, trace_url, and token_usage. Content
 stores the LLM's reasoning narrative. Gets history, associations, comments,
 search, and audit trail for free.
 
-**`fleetgraph_config`** — singleton per workspace. Stores last_check_at,
-notification_cooldowns, poll_interval_ms, debounce_window_ms, and
-enabled_detections. Operational state for the proactive agent.
-
-No new tables. No schema changes beyond two enum values.
+No new tables. No schema changes beyond one enum value (`fleetgraph_finding`).
+Operational configuration (poll intervals, debounce windows, enabled detections)
+is managed via environment variables and config.ts, not stored in the database.
 
 ---
 
@@ -664,13 +662,10 @@ acts on scope creep. Different rhythms, different cadences.
 
 #### Implementation status
 
-The cadence routing is **implemented in code** — `state.ts` defines
-`scanType: 'hot' | 'daily' | 'weekly' | null`, reasoning.ts constrains finding
-types and selects models per cadence, and fetch nodes vary their data retrieval
-by scanType. What's not yet implemented is the **scheduler**: the trigger
-currently dispatches all scans as a single type. Wiring the scheduler to invoke
-the graph with different `scanType` values on different schedules is the
-remaining work.
+Fully implemented. `state.ts` defines `scanType: 'hot' | 'daily' | 'weekly' | null`.
+The poller dispatches each cadence independently (`[poller:hot]`, `[poller:daily]`,
+`[poller:weekly]`). Reasoning prompts, model selection, and fetch scoping all vary
+by scanType. WebSocket events trigger hot scans in real time via the listener.
 
 ### Deployment: Separate Service on Linode VPS
 
