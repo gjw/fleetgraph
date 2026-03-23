@@ -507,6 +507,7 @@ and weekly scans run on schedule.
 | WebSocket → hot scan | Real-time event | [TC-1](https://smith.langchain.com/public/94fcc511-e3ad-43c3-8d6e-594ae0073f0c/r) | Action Propose |
 | On-demand (scoped) | User chat | [TC-2](https://smith.langchain.com/public/e0748464-e573-46b2-8ac0-19e39f9c2e08/r) | Notify / Action Propose |
 | Proactive hot (poll) | 5-min timer | [TC-3](https://smith.langchain.com/public/6680c5b7-3856-4cde-b639-66dfa8524761/r) | Action Propose |
+| Proactive hot (poll) | 5-min timer | [TC-4](https://smith.langchain.com/public/6680c5b7-3856-4cde-b639-66dfa8524761/r) | Action Propose (shared with TC-3) |
 | Weekly (clean) | Scheduled | [TC-5](https://smith.langchain.com/public/a25e6593-4a02-408e-8979-4b9617d3cc38/r) | Clean |
 
 ### Findings Dedup
