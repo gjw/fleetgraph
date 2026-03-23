@@ -5,12 +5,13 @@ via graph architecture.
 
 ## Public LangSmith Traces
 
-Until/unless we refactor for the final, multiple use cases are scanned for in a
-single invocation. There are really only 2 different classes of calling the graph:
-4 use cases are handled by the proactive scan, and 1 by the on-demand.
+Three cadences (hot, daily, weekly) handle proactive detection. On-demand is
+triggered by user chat. WebSocket events trigger hot scans in real time.
 
-- **On-demand:** https://smith.langchain.com/public/8b727526-5e21-4cd5-8a86-67eb751ffedc/r
-- **Proactive:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r
+- **WebSocket-triggered (scope creep):** https://smith.langchain.com/public/94fcc511-e3ad-43c3-8d6e-594ae0073f0c/r
+- **On-demand (sprint analysis):** https://smith.langchain.com/public/e0748464-e573-46b2-8ac0-19e39f9c2e08/r
+- **Proactive hot (blocked chains):** https://smith.langchain.com/public/6680c5b7-3856-4cde-b639-66dfa8524761/r
+- **Weekly clean (no findings):** https://smith.langchain.com/public/a25e6593-4a02-408e-8979-4b9617d3cc38/r
 
 ---
 
@@ -451,75 +452,72 @@ missed during the gap.
 ## Test Cases
 
 Test cases run against seeded Ship data (`pnpm db:seed && pnpm db:seed:fg`).
-Each case invokes the FleetGraph graph and captures a LangSmith trace showing
-the execution path.
+Each case captures a LangSmith trace showing the execution path.
 
-All proactive use cases (TC-1 through TC-4) are detected in a single graph
-invocation — the proactive scan analyzes the full workspace and produces
-rolled-up findings across multiple detection types. On-demand (TC-5) is a
-separate invocation scoped to the user's current context.
+FleetGraph uses three proactive cadences (hot, daily, weekly) plus on-demand
+chat. The hot loop runs on WebSocket events and a 5-minute poll backup. Daily
+and weekly scans run on schedule.
 
-### TC-1: Stale Triage Backlog (UC2)
+### TC-1: WebSocket-Triggered Scope Creep (UC1)
 
-- **Mode:** Proactive
-- **Graph path:** Trigger → Fetch (parallel) → Reasoning (GPT-4o) → Classify (GPT-4o-mini) → Action Propose → Human Gate → Persist
-- **Ship state:** 6 issues in `triage` status for 4-7 days in FleetGraph Demo program (4 external bugs, 2 internal feature requests). 1 confounder: fresh triage issue (1 day old).
-- **Expected:** Rolled-up finding identifying stale triage backlog
-- **Actual:** `stale_triage` finding at program and sprint level. Correctly identifies issues stuck in triage. Confounder (1-day-old issue) not flagged.
-- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r
+- **Mode:** Proactive (WebSocket trigger)
+- **Graph path:** Trigger (WebSocket) → Fetch (hot-loop) → Reasoning (GPT-4o-mini) → Classify → Action Propose → Human Gate → Persist
+- **Ship state:** Active Week 14 sprint in FleetGraph Demo with 6 pre-start issues. 3 new issues created mid-sprint, triggering a WebSocket event to Ship's `/events` endpoint.
+- **Expected:** `scope_creep` finding quantifying the increase
+- **Actual:** Scope creep detected. Finding persisted with severity and link to affected sprint.
+- **Trace:** https://smith.langchain.com/public/94fcc511-e3ad-43c3-8d6e-594ae0073f0c/r
 
-### TC-2: Overloaded Team Member (UC1/UC5)
+### TC-2: On-Demand Sprint Analysis (UC6)
 
-- **Mode:** Proactive (same scan as TC-1)
-- **Ship state:** David Kim assigned 29 active issues across 2 programs, 79h estimated in FleetGraph Demo Week 14 alone.
-- **Expected:** Finding identifying overloaded team member with workload quantified
-- **Actual:** `overloaded_member` finding for David Kim (warning). Title and summary reflect actual issue count.
-- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r (shared proactive scan)
+- **Mode:** On-demand (user chat)
+- **Graph path:** Trigger → Context (resolves user + sprint document) → Fetch (scoped to sprint) → Reasoning (GPT-4o) → Classify → Persist
+- **Ship state:** User viewing Week 13 sprint page, clicks "Analyze this week" predefined button.
+- **Expected:** Sprint-scoped analysis — missing plan, workload issues, stale items
+- **Actual:** Findings scoped to Week 13: missing sprint plan, overloaded member, stale triage. Context node resolved sprint document, fetch scoped to sprint issues (not full workspace).
+- **Trace:** https://smith.langchain.com/public/e0748464-e573-46b2-8ac0-19e39f9c2e08/r
 
-### TC-3: Accountability Debt (UC3)
+### TC-3: Proactive Blocked Chain Detection (UC4)
 
-- **Mode:** Proactive (same scan as TC-1)
-- **Ship state:** Multiple team members with missing sprint plans, retros, and standups. Active and completed sprints with accountability gaps. Compliant members (Grace Lee, Iris Nguyen) present as confounders.
-- **Expected:** Per-person and per-sprint accountability findings, compliant members excluded
-- **Actual:** `accountability_debt` findings for Alice Chen, Dev User, and Weeks 12-14 missing plans/retros. Rolled up per entity. Program-level finding summarizing missing documentation.
-- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r (shared proactive scan)
+- **Mode:** Proactive (hot-loop scan)
+- **Graph path:** Trigger (poll) → Fetch (issues + sprints) → Reasoning (GPT-4o-mini) → Classify → Action Propose → Human Gate → Persist
+- **Ship state:** Multiple dependency chains in FleetGraph Demo Week 13. Issues stuck in review with downstream blockers.
+- **Expected:** `blocked_chain` findings identifying stuck dependency chains
+- **Actual:** Blocked chain findings for Week 13, with proposed action to resolve dependencies.
+- **Trace:** https://smith.langchain.com/public/6680c5b7-3856-4cde-b639-66dfa8524761/r
 
-### TC-4: Blocked Work / Missing Estimates (UC4)
+### TC-4: Proactive Stale Triage + Accountability (UC2/UC3)
 
-- **Mode:** Proactive (same scan as TC-1)
-- **Ship state:** 4-link dependency chain in FleetGraph Demo (Document pool config → Health check → Retry logic → DB migration pooling), bottom 2 stuck in review. Multiple Week 14 sprints with unestimated issues.
-- **Expected:** Blocked chain detection and missing estimate findings
-- **Actual:** `blocked_chain` finding for "Create error handling" issue (critical). `missing_estimate` findings at sprint and program level identifying unestimated issues in active weeks.
-- **Trace:** https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r (shared proactive scan)
+- **Mode:** Proactive (shared scan with TC-3)
+- **Ship state:** 6 issues in triage for 4-7 days. Multiple sprints missing plans/retros. David Kim assigned 29+ active issues.
+- **Expected:** Rolled-up findings: stale triage backlog, accountability gaps, overloaded member
+- **Actual:** `stale_triage`, `accountability_debt`, and `overloaded_member` findings. Each rolled up per entity, not per item.
+- **Trace:** https://smith.langchain.com/public/6680c5b7-3856-4cde-b639-66dfa8524761/r (shared with TC-3)
 
-### TC-5: On-Demand Scoped Analysis (UC6)
+### TC-5: Clean Run (Weekly Scan)
 
-- **Mode:** On-demand
-- **Graph path:** Trigger → Context (resolves user + document) → Fetch (scoped to sprint) → Reasoning → Classify → Action Propose → Persist
-- **Ship state:** User on a Week 14 sprint page, asking "What should I work on next?"
-- **Expected:** Analysis scoped to the current sprint's issues, prioritized recommendations
-- **Actual:** Response scoped to sprint context. Fetches sprint issues (not full workspace). Different execution path from proactive — context node resolves document associations before fetching.
-- **Trace:** https://smith.langchain.com/public/8b727526-5e21-4cd5-8a86-67eb751ffedc/r
+- **Mode:** Proactive (weekly cadence)
+- **Graph path:** Trigger → Fetch (retro documents) → Reasoning (GPT-4o) → Classify → **Clean (END)**
+- **Ship state:** Weekly scan analyzing retrospective patterns across sprints. No recurring retro themes in current data.
+- **Expected:** No findings. Classify → Clean.
+- **Actual:** 0 findings, classification=clean. Graph stayed silent — no noise when there's nothing to report.
+- **Trace:** https://smith.langchain.com/public/a25e6593-4a02-408e-8979-4b9617d3cc38/r
 
 ### Trace Diversity
 
-| Path | Trace | Key Difference |
-|------|-------|----------------|
-| Proactive (workspace-wide) | [Proactive trace](https://smith.langchain.com/public/2e3c94cc-22ef-4d83-ab61-f91e0af7d25f/r) | No context node, full workspace fetch, multi-finding rollup |
-| On-demand (scoped) | [On-demand trace](https://smith.langchain.com/public/8b727526-5e21-4cd5-8a86-67eb751ffedc/r) | Context resolves user + document, scoped fetch, user question shapes reasoning |
+| Path | Trigger | Trace | Classify Branch |
+|------|---------|-------|-----------------|
+| WebSocket → hot scan | Real-time event | [TC-1](https://smith.langchain.com/public/94fcc511-e3ad-43c3-8d6e-594ae0073f0c/r) | Action Propose |
+| On-demand (scoped) | User chat | [TC-2](https://smith.langchain.com/public/e0748464-e573-46b2-8ac0-19e39f9c2e08/r) | Notify / Action Propose |
+| Proactive hot (poll) | 5-min timer | [TC-3](https://smith.langchain.com/public/6680c5b7-3856-4cde-b639-66dfa8524761/r) | Action Propose |
+| Weekly (clean) | Scheduled | [TC-5](https://smith.langchain.com/public/a25e6593-4a02-408e-8979-4b9617d3cc38/r) | Clean |
 
-### Findings Dedup Verification
+### Findings Dedup
 
-After 3+ consecutive proactive scans: total finding count equals unique
-`(finding_type, affected_entity_id)` count. No duplicates created. Existing
-findings updated in place when conditions persist — severity escalation
-re-badges the user, same-severity updates are silent.
-
-### Known Gaps for Final Submission
-
-1. **Scope creep detection** — scope change data is fetched but stale_triage dominates reasoning in the monolithic prompt. Cadenced scan architecture (separating hot-loop detections from daily digest) will fix this.
-2. **Retro pattern mining** — retro document content not yet fetched. Need document body fetching for UC7.
-3. **On-demand chat responsiveness** — the graph produces findings but doesn't directly answer the user's question in conversational form. Response format improvement queued.
+Dedup keys on `(finding_type, affected_entity_id)`. When a condition persists
+across scans, the existing finding is updated in place (title, severity, content)
+rather than creating a duplicate. Severity escalation re-badges the user;
+same-severity updates are silent. Acknowledged findings stay tracked but don't
+re-badge unless severity escalates.
 
 ---
 
@@ -681,3 +679,49 @@ Beanstalk deployment. Ship's API proxies FleetGraph requests, forwarding session
 auth. Separation because: FleetGraph has different scaling characteristics (LLM
 latency, not request throughput), doesn't need EB's auto-scaling, and shouldn't
 be coupled to Ship's deploy cycle. A FleetGraph restart doesn't take Ship down.
+
+---
+
+## Cost Analysis
+
+### Development and Testing Costs (Mar 16–22, 2026)
+
+| Item | Amount |
+|------|--------|
+| GPT-4o input tokens | 44,709,401 |
+| GPT-4o output tokens | 912,920 |
+| GPT-4o-mini input tokens | 12,343,960 |
+| GPT-4o-mini output tokens | 193,103 |
+| Total invocations | 3,823 |
+| Total development spend | $79.95 |
+
+Average cost per graph invocation: $0.021. Average tokens per invocation: ~15K.
+
+GPT-4o handles reasoning (deep analysis, ~$0.05/call). GPT-4o-mini handles
+classification and hot-loop reasoning (~$0.003/call). The majority of spend
+is GPT-4o reasoning on daily scans with large workspace data payloads.
+
+### Production Cost Projections
+
+| | 100 Users | 1,000 Users | 10,000 Users |
+|---|---|---|---|
+| Proactive scans | $17/month | $17/month | $17/month |
+| On-demand queries | $270/month | $2,700/month | $27,000/month |
+| **Total** | **$287/month** | **$2,717/month** | **$27,017/month** |
+
+**Assumptions:**
+
+- Proactive: ~50 hot scans/day (WebSocket-triggered, not continuous polling),
+  1 daily scan, 1 weekly scan. Proactive cost is per-workspace, not per-user.
+- On-demand: 3 invocations per user per day at ~$0.03 each.
+- On-demand scales linearly with users. Proactive does not.
+
+**Cost optimization levers:**
+
+- Hot scans use GPT-4o-mini (~$0.01/run) instead of GPT-4o (~$0.05/run) —
+  acceptable because hot scans check focused conditions (scope creep, blocked
+  chains), not full workspace analysis.
+- Dedup prevents redundant finding creation — the graph runs but doesn't persist
+  if the condition is already tracked.
+- Cadenced scans reduce unnecessary runs: stale triage doesn't need checking
+  every 5 minutes, only once per morning.
